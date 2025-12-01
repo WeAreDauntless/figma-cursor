@@ -1,0 +1,434 @@
+---
+description: Server Actions patterns and best practices
+globs:
+  - "src/actions/**/*.ts"
+  - "src/actions/**/*.tsx"
+alwaysApply: true
+---
+
+# Server Actions Pattern
+
+Server Actions in `src/actions/` handle server-side operations like sending emails, processing payments, and other server-only tasks.
+
+For the following globs:
+
+- "src/actions/\*\*/\*.ts"
+- "src/actions/\*\*/\*.tsx"
+
+## File Organization
+
+```
+src/actions/
+  invite-user.tsx              # User invitation
+  share-report.tsx             # Share filtered views
+  send-payment-success-email.tsx
+  send-payment-failure-emails.tsx
+```
+
+Server actions can also be co-located in module folders:
+
+```
+src/app/(authenticated)/rentals/actions/
+  request-pickup.tsx
+  request-service.tsx
+```
+
+## What Server Actions SHOULD Contain
+
+- ✅ Input validation (Zod schemas when needed)
+- ✅ Server-side operations (email sending, API calls, etc.)
+- ✅ Error handling and formatting
+- ✅ Direct calls to services and utilities
+- ✅ Business logic for the specific action
+
+## What Server Actions SHOULD NOT Contain
+
+- ❌ Client-side state management (use React hooks instead)
+- ❌ Browser APIs (localStorage, window, etc.)
+- ❌ React hooks (useState, useEffect, etc.)
+- ❌ Direct database queries (use services instead)
+
+## The Pattern
+
+### ✅ GOOD: Server action with proper error handling
+
+```typescript
+// src/actions/share-report.tsx
+"use server";
+
+import { render, sendMail } from "@repo/email";
+import { ShareReportTemplate } from "@repo/email/templates/share-report";
+
+import { env } from "@/env";
+import type { ReportType, ShareResponse } from "@/src/types/share";
+
+export async function shareReport(
+  emails: string[],
+  url: string,
+  customerDisplayName: string,
+  reportType: ReportType,
+  notes?: string
+): Promise<ShareResponse> {
+  try {
+    const html = await render(
+      ShareReportTemplate({ url, customerDisplayName, notes })
+    );
+
+    await sendMail({
+      to: emails,
+      from: env.SENDGRID_FROM,
+      subject: `Shared ${reportType} filtered view link`,
+      html,
+    });
+
+    return { error: null };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to share filtered view",
+    };
+  }
+}
+```
+
+### ✅ GOOD: Server action with validation
+
+```typescript
+// src/actions/share-report.tsx
+"use server";
+
+import { z } from "zod";
+import { render, sendMail } from "@repo/email";
+import { ShareReportTemplate } from "@repo/email/templates/share-report";
+
+import { env } from "@/env";
+import type { ReportType, ShareResponse } from "@/src/types/share";
+
+const shareReportSchema = z.object({
+  emails: z.array(z.string().email()),
+  url: z.string().url(),
+  customerDisplayName: z.string().min(1),
+  reportType: z.enum(["rentals", "invoices"]),
+  notes: z.string().optional(),
+});
+
+export async function shareReport(
+  emails: string[],
+  url: string,
+  customerDisplayName: string,
+  reportType: ReportType,
+  notes?: string
+): Promise<ShareResponse> {
+  // Validate input
+  const validation = shareReportSchema.safeParse({
+    emails,
+    url,
+    customerDisplayName,
+    reportType,
+    notes,
+  });
+
+  if (!validation.success) {
+    return {
+      error: "Invalid input: " + validation.error.message,
+    };
+  }
+
+  try {
+    const html = await render(
+      ShareReportTemplate({
+        url: validation.data.url,
+        customerDisplayName: validation.data.customerDisplayName,
+        notes: validation.data.notes,
+      })
+    );
+
+    await sendMail({
+      to: validation.data.emails,
+      from: env.SENDGRID_FROM,
+      subject: `Shared ${validation.data.reportType} filtered view link`,
+      html,
+    });
+
+    return { error: null };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to share filtered view",
+    };
+  }
+}
+```
+
+### ✅ GOOD: Server action with parallel operations
+
+When you need to perform multiple operations in parallel (e.g., sending multiple emails):
+
+```typescript
+// src/actions/invite-user.tsx
+"use server";
+
+import type { UserRole } from "@repo/auth/types";
+import { render, sendMail } from "@repo/email";
+import { InviteUserTemplate } from "@repo/email/templates/invite-user";
+
+import { env } from "@/env";
+import type { ShareResponse } from "@/src/types/share";
+import { generateInviteToken } from "@/src/utils/generate-invite-token";
+
+type InvitedUser = {
+  email: string;
+  role: UserRole;
+};
+
+export async function inviteUser(
+  companyId: string,
+  companyName: string,
+  users: InvitedUser[]
+): Promise<ShareResponse> {
+  try {
+    // Use Promise.all to send multiple emails in parallel
+    await Promise.all(
+      users.map(async ({ email, role }) => {
+        const inviteUrl = generateInviteToken({
+          companyId,
+          companyName,
+          email,
+          role,
+        });
+
+        const html = await render(
+          InviteUserTemplate({
+            companyName,
+            inviteUrl,
+            role,
+          })
+        );
+
+        return sendMail({
+          to: email,
+          from: env.SENDGRID_FROM,
+          subject: `You're invited to join ${companyName}`,
+          html,
+        });
+      })
+    );
+
+    return { error: null };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to send invites",
+    };
+  }
+}
+```
+
+## Error Handling Pattern
+
+Always return structured errors for client consumption:
+
+```typescript
+// Standard return type for actions
+type ActionResponse<T = void> = {
+  error: string | null;
+  data?: T;
+};
+
+export async function someAction(input: unknown): Promise<ActionResponse> {
+  try {
+    // Validation
+    const validation = schema.safeParse(input);
+    if (!validation.success) {
+      return {
+        error: "Validation failed: " + validation.error.message,
+      };
+    }
+
+    // Business logic
+    const result = await performOperation(validation.data);
+
+    if (result.error) {
+      return { error: result.error };
+    }
+
+    return { error: null, data: result.data };
+  } catch (error) {
+    console.error("Action failed:", error);
+    return {
+      error:
+        error instanceof Error ? error.message : "An unexpected error occurred",
+    };
+  }
+}
+```
+
+## Using Server Actions in Components
+
+### With useTransition (Recommended)
+
+```typescript
+'use client';
+
+import { useTransition } from 'react';
+import { inviteUser } from '@/src/actions/invite-user';
+import { useToast } from '@hooks/use-toast';
+
+export function InviteUserDialog() {
+  const [isPending, startTransition] = useTransition();
+  const { toast } = useToast();
+
+  async function handleInvite(users: InvitedUser[]) {
+    startTransition(async () => {
+      const result = await inviteUser(companyId, companyName, users);
+
+      if (result.error) {
+        toast({
+          title: 'Error',
+          description: result.error,
+          variant: 'destructive'
+        });
+      } else {
+        toast({
+          title: 'Success',
+          description: 'Invitations sent successfully'
+        });
+      }
+    });
+  }
+
+  return (
+    // Form implementation...
+  );
+}
+```
+
+### Direct Form Action
+
+```typescript
+"use client";
+
+import { shareReport } from "@/src/actions/share-report";
+
+export function ShareReportForm() {
+  return (
+    <form
+      action={async (formData: FormData) => {
+        const emails = formData.get("emails")?.toString().split(",") || [];
+        const url = formData.get("url")?.toString() || "";
+
+        const result = await shareReport(emails, url, customerName, "rentals");
+
+        if (result.error) {
+          // Handle error
+        }
+      }}
+    >
+      {/* Form fields */}
+    </form>
+  );
+}
+```
+
+## Co-located Actions
+
+For actions specific to a module, co-locate them in the module folder:
+
+```typescript
+// src/app/(authenticated)/rentals/actions/request-pickup.tsx
+"use server";
+
+import { render, sendMail } from "@repo/email";
+import { RequestPickupTemplate } from "@repo/email/templates/request-pickup";
+
+import { env } from "@/env";
+import {
+  getEmailForBranch,
+  getEmailForCompany,
+} from "@/src/services/email-service";
+
+export async function requestPickup(data: RequestPickupData): Promise<{
+  error: string | null;
+}> {
+  try {
+    // Implementation...
+    return { error: null };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Failed to request pickup",
+    };
+  }
+}
+```
+
+## Best Practices
+
+1. **Always use `'use server'` directive** at the top of server action files
+2. **Return consistent error format** - `{ error: string | null }` or `{ error: string | null, data?: T }`
+3. **Validate inputs** when accepting user data (use Zod schemas)
+4. **Handle errors gracefully** - catch errors and return user-friendly messages
+5. **Use TypeScript types** for parameters and return values
+6. **Keep actions focused** - one action per file or group related actions
+7. **Use services for complex operations** - delegate to services when logic is reusable
+8. **Don't expose sensitive data** - never return API keys, tokens, or internal errors to the client
+
+## Common Patterns
+
+### Email Actions
+
+```typescript
+"use server";
+
+import { render, sendMail } from "@repo/email";
+import { SomeTemplate } from "@repo/email/templates/some-template";
+
+import { env } from "@/env";
+
+export async function sendEmail(
+  data: EmailData
+): Promise<{ error: string | null }> {
+  try {
+    const html = await render(SomeTemplate(data));
+
+    await sendMail({
+      to: data.email,
+      from: env.SENDGRID_FROM,
+      subject: data.subject,
+      html,
+    });
+
+    return { error: null };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Failed to send email",
+    };
+  }
+}
+```
+
+### Actions with Revalidation
+
+```typescript
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+export async function updateSomething(
+  id: string
+): Promise<{ error: string | null }> {
+  try {
+    // Update logic...
+
+    // Revalidate the page
+    revalidatePath(`/some-path/${id}`);
+
+    return { error: null };
+  } catch (error) {
+    return { error: "Update failed" };
+  }
+}
+```

@@ -1,0 +1,503 @@
+---
+description: External service integrations pattern (service layer)
+globs:
+  - 'src/services/**/*.ts'
+alwaysApply: true
+---
+
+# Services (Service Layer)
+
+External service integrations in `src/services/` handle communication with third-party services and APIs.
+
+For the following globs:
+
+- "src/services/\*\*/\*.ts"
+
+## Directory Structure
+
+```
+src/services/
+  authorize-net-service.ts    # Authorize.net payment processing
+  curbstone-service.ts        # Curbstone payment service (legacy)
+  email-service.ts            # Email configuration service
+  pdf-service.ts              # PDF generation service
+  payment-session-service.ts  # Payment session management
+  supabase.ts                 # Supabase edge function calls
+```
+
+## When to Add Code Here
+
+- ✅ External service integration (Authorize.net, Wynne Systems, etc.)
+- ✅ Third-party API clients
+- ✅ Service classes with multiple related methods
+- ✅ Database operations via Supabase edge functions
+- ❌ Business logic (belongs in modules or server actions)
+- ❌ Pure utilities (belongs in `utils/`)
+- ❌ Simple one-off API calls (can be in module `api.ts`)
+
+## Service Patterns
+
+### Class-Based Services (Complex Services)
+
+Use classes when the service has:
+- Multiple related methods
+- Internal state or configuration
+- Complex initialization
+- Shared state across methods
+
+```typescript
+// src/services/authorize-net-service.ts
+
+import { env } from '@/env';
+
+export interface AuthorizeNetInitRequest {
+  paymentReference: string;
+  amount: number;
+  customerNumber: string;
+  customerProfileId?: string;
+}
+
+export interface AuthorizeNetInitResponse {
+  success: boolean;
+  data?: {
+    formToken: string;
+    iframeBaseUrl: string;
+  };
+  error?: string;
+}
+
+export class AuthorizeNetService {
+  private readonly apiLoginId: string;
+  private readonly transactionKey: string;
+  private readonly baseUrl: string;
+
+  constructor() {
+    this.apiLoginId = env.AUTHORIZE_NET_API_LOGIN_ID;
+    this.transactionKey = env.AUTHORIZE_NET_TRANSACTION_KEY;
+    this.baseUrl = env.AUTHORIZE_NET_BASE_URL;
+  }
+
+  /**
+   * Initialize a payment session with Authorize.net
+   */
+  async initPaymentSession(
+    request: AuthorizeNetInitRequest
+  ): Promise<AuthorizeNetInitResponse> {
+    try {
+      // Implementation...
+      return {
+        success: true,
+        data: {
+          formToken: 'token',
+          iframeBaseUrl: 'url'
+        }
+      };
+    } catch (error) {
+      console.error('Failed to initialize payment session:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Get transaction status
+   */
+  async getTransactionStatus(transactionId: string) {
+    // Implementation...
+  }
+}
+
+// Export singleton instance
+export const authorizeNetService = new AuthorizeNetService();
+```
+
+### Function-Based Services (Simple Services)
+
+Use functions when the service is:
+- Simple API wrapper
+- Stateless operations
+- Single-purpose functions
+
+```typescript
+// src/services/pdf-service.ts
+
+interface GeneratePDFResponse {
+  success: boolean;
+  filePath: string;
+}
+
+/**
+ * Generate PDF via Wynne Systems API
+ */
+export async function generatePDF(
+  contractNumber: string,
+  sequenceNumber?: string,
+  type: string = 'I',
+  signal?: AbortSignal
+): Promise<void> {
+  const payload = {
+    contractNumber,
+    ...(sequenceNumber && { sequenceNumber }),
+    type
+  };
+
+  const response = await fetch('/api/pdf/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload),
+    signal
+  });
+
+  if (!response.ok) {
+    const errorData = (await response.json()) as { error?: string };
+    throw new Error(errorData.error || 'Failed to generate PDF');
+  }
+
+  const responseData = (await response.json()) as GeneratePDFResponse;
+
+  if (!responseData.success || !responseData.filePath) {
+    throw new Error('Failed to generate PDF');
+  }
+}
+
+/**
+ * Retrieve PDF file URL
+ */
+export async function getPDF(
+  contractNumber: string,
+  sequenceNumber?: string,
+  type: string = 'I',
+  signal?: AbortSignal
+): Promise<string> {
+  const params = new URLSearchParams({
+    contractNumber,
+    type
+  });
+
+  if (sequenceNumber) {
+    params.append('sequenceNumber', sequenceNumber);
+  }
+
+  const response = await fetch(`/api/pdf/get?${params.toString()}`, {
+    method: 'GET',
+    signal
+  });
+
+  if (!response.ok) {
+    const errorData = (await response.json()) as { error?: string };
+    throw new Error(errorData.error || 'Failed to retrieve PDF');
+  }
+
+  const pdfBlob = await response.blob();
+  return URL.createObjectURL(pdfBlob);
+}
+```
+
+### Supabase Edge Function Service
+
+```typescript
+// src/services/supabase.ts
+
+import { getSupabaseFunctionsUrl } from '@repo/api/env';
+import { env } from '@/env';
+
+/**
+ * Call Supabase edge function
+ */
+export async function callEdgeFunction<T>(
+  functionName: string,
+  payload: Record<string, unknown>
+): Promise<{ data: T | null; error?: string }> {
+  try {
+    const response = await fetch(
+      `${getSupabaseFunctionsUrl()}/${functionName}`,
+      {
+        method: 'POST',
+        headers: {
+          'apikey': env.NEXT_PUBLIC_SUPABASE_KEY,
+          'Authorization': `Bearer ${env.NEXT_PUBLIC_SUPABASE_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        `Supabase function error: ${response.status} - ${errorText}`
+      );
+
+      return {
+        data: null,
+        error: `Function error: ${response.status} - ${errorText}`
+      };
+    }
+
+    const data = (await response.json()) as T;
+    return { data };
+  } catch (error) {
+    console.error(`Error calling Supabase function ${functionName}:`, error);
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+```
+
+### Database Service Class
+
+```typescript
+// src/services/payment-session-service.ts
+
+import { createClient } from '@supabase/supabase-js';
+import { env } from '@/env';
+import type {
+  PaymentSession,
+  CreatePaymentSessionRequest
+} from '@/src/types/payment-session';
+
+const supabase = createClient(
+  env.NEXT_PUBLIC_SUPABASE_URL,
+  env.NEXT_PUBLIC_SUPABASE_KEY
+);
+
+export class PaymentSessionService {
+  /**
+   * Create a new payment session and its items
+   */
+  async createPaymentSession(
+    request: CreatePaymentSessionRequest
+  ): Promise<PaymentSession> {
+    const { data, error } = await supabase
+      .schema('payments')
+      .from('payment_sessions')
+      .insert({
+        customer_number: request.customerNumber,
+        payment_type: request.paymentType,
+        total_amount: request.totalAmount,
+        status: 'initiated'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create payment session: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error('Failed to create payment session: No data returned');
+    }
+
+    // Create payment session items
+    const items = request.invoices.map((invoice) => ({
+      payment_session_id: data.id,
+      invoice_id: invoice.invoiceId,
+      amount: invoice.amount,
+      status: 'pending'
+    }));
+
+    const { error: itemsError } = await supabase
+      .schema('payments')
+      .from('payment_session_items')
+      .insert(items);
+
+    if (itemsError) {
+      throw new Error(
+        `Failed to create payment session items: ${itemsError.message}`
+      );
+    }
+
+    return this.mapDatabaseToPaymentSession(data);
+  }
+
+  /**
+   * Get payment session by session ID
+   */
+  async getPaymentSession(sessionId: string): Promise<PaymentSession | null> {
+    // Implementation...
+  }
+
+  private mapDatabaseToPaymentSession(
+    data: DatabasePaymentSession
+  ): PaymentSession {
+    // Map database format to application format
+    // ...
+  }
+}
+
+// Export singleton instance
+export const paymentSessionService = new PaymentSessionService();
+```
+
+## Naming Conventions
+
+- **Service files**: `{service-name}-service.ts` (kebab-case)
+- **Service classes**: `{ServiceName}Service` (PascalCase)
+- **Singleton exports**: `{serviceName}Service` (camelCase)
+- **Function exports**: `verbNoun` (camelCase)
+
+Examples:
+- `authorize-net-service.ts` → `AuthorizeNetService` → `authorizeNetService`
+- `pdf-service.ts` → `generatePDF`, `getPDF`
+
+## Dependency Rules
+
+Services can import from:
+
+- ✅ `types/` (for type definitions)
+- ✅ `utils/` (for utilities)
+- ✅ `env` (for environment variables)
+- ✅ Workspace packages (`@repo/api`, etc.)
+- ✅ External packages
+- ❌ Module folders (services should be module-independent)
+- ❌ `actions/` (services shouldn't depend on server actions)
+
+```typescript
+// Good
+import type { PaymentSession } from '@/src/types/payment-session';
+import { env } from '@/env';
+import { getSupabaseFunctionsUrl } from '@repo/api/env';
+
+// Bad
+import { getRentals } from '@/src/app/(authenticated)/rentals/api';
+import { inviteUser } from '@/src/actions/invite-user';
+```
+
+## Configuration
+
+Keep sensitive configuration in environment variables:
+
+```typescript
+// src/services/authorize-net-service.ts
+import { env } from '@/env';
+
+export class AuthorizeNetService {
+  private readonly apiLoginId: string;
+  private readonly transactionKey: string;
+
+  constructor() {
+    this.apiLoginId = env.AUTHORIZE_NET_API_LOGIN_ID;
+    this.transactionKey = env.AUTHORIZE_NET_TRANSACTION_KEY;
+  }
+}
+```
+
+## Error Handling
+
+Always return structured results or throw errors appropriately:
+
+### Structured Response Pattern
+
+```typescript
+export async function someService(): Promise<{
+  success: boolean;
+  data?: SomeData;
+  error?: string;
+}> {
+  try {
+    const result = await externalService.doSomething();
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('Service failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+```
+
+### Throw Error Pattern (for critical failures)
+
+```typescript
+export async function createPaymentSession(
+  request: CreatePaymentSessionRequest
+): Promise<PaymentSession> {
+  const { data, error } = await supabase
+    .from('payment_sessions')
+    .insert(request)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create payment session: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error('Failed to create payment session: No data returned');
+  }
+
+  return data;
+}
+```
+
+## Using Services
+
+### In Server Actions
+
+```typescript
+// src/actions/invite-user.tsx
+'use server';
+
+import { getEmailForCompany } from '@/src/services/email-service';
+
+export async function inviteUser(companyId: string) {
+  const companyEmail = await getEmailForCompany(companyId);
+  // Use companyEmail...
+}
+```
+
+### In API Routes
+
+```typescript
+// src/app/api/payments/start/route.ts
+import { authorizeNetService } from '@/src/services/authorize-net-service';
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const result = await authorizeNetService.initPaymentSession(body);
+
+  if (!result.success) {
+    return Response.json({ error: result.error }, { status: 400 });
+  }
+
+  return Response.json(result.data);
+}
+```
+
+### In Module API Files
+
+```typescript
+// src/app/(authenticated)/rentals/api.ts
+import { callEdgeFunction } from '@/src/services/supabase';
+import type { Rental } from './types';
+
+export async function getRentals(payload: RentalsPayload) {
+  const result = await callEdgeFunction<Rental[]>('get_rentals', payload);
+
+  if (result.error) {
+    return { data: [], error: result.error };
+  }
+
+  return { data: result.data ?? [], error: null };
+}
+```
+
+## Best Practices
+
+1. **Use classes for complex services** - Multiple methods, shared state, or configuration
+2. **Use functions for simple services** - Single-purpose, stateless operations
+3. **Export singleton instances** - For class-based services, export a single instance
+4. **Handle errors consistently** - Use structured responses or throw errors appropriately
+5. **Use TypeScript interfaces** - Define request/response types for service methods
+6. **Keep services focused** - One service per external API/service
+7. **Use environment variables** - Never hardcode API keys or secrets
+8. **Add JSDoc comments** - Document complex service methods
+9. **Log errors** - Use `console.error` for service failures
+10. **Handle timeouts** - Use `AbortSignal` for long-running operations

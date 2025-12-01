@@ -1,0 +1,494 @@
+---
+description: Type definitions and Zod schemas for the app
+globs:
+  - 'src/types/**/*.ts'
+  - 'src/schemas/**/*.ts'
+alwaysApply: true
+---
+
+# Types and Schemas
+
+Type definitions and Zod schemas for runtime validation and type safety.
+
+For the following globs:
+
+- "src/types/\*\*/\*.ts"
+- "src/schemas/\*\*/\*.ts"
+
+## When to Add Code Here
+
+### Global Types (`src/types/`)
+
+- ✅ Types shared across multiple modules
+- ✅ API response types
+- ✅ Shared domain types (PaymentSession, ShareResponse, etc.)
+- ✅ Type definitions for external libraries
+- ❌ Module-specific types (keep them in the module folder)
+
+### Global Schemas (`src/schemas/`)
+
+- ✅ Reusable validation schemas (email, phone, forms)
+- ✅ Shared validation logic
+- ❌ Module-specific schemas (co-locate in module folder)
+
+## File Structure
+
+```
+src/types/
+  payment-session.ts    # Payment domain types
+  payment.ts           # Payment state types
+  share.ts             # Share/report types
+  supabase.ts          # Supabase response types
+  papaparse.d.ts       # Type declarations for external libs
+
+src/schemas/
+  email.ts             # Email validation schemas
+  phone-number.ts      # Phone number validation
+  forms.ts             # Form field schemas
+  area-codes.ts        # Phone area codes data
+
+src/app/(authenticated)/rentals/
+  types.ts             # Module-specific types
+  schemas.ts           # Module-specific schemas
+```
+
+## Type Definitions
+
+### Shared Types
+
+```typescript
+// src/types/payment-session.ts
+
+export type PaymentType = 'single' | 'batch' | 'short';
+
+export type PaymentSessionStatus =
+  | 'initiated'
+  | 'awaiting_payment'
+  | 'payment_authorized'
+  | 'payment_captured'
+  | 'assigning_invoices'
+  | 'completed'
+  | 'payment_failed'
+  | 'cancelled'
+  | 'expired';
+
+export interface PaymentSession {
+  id: string;
+  sessionId: string;
+  customerNumber: string;
+  paymentType: PaymentType;
+  totalAmount: number;
+  status: PaymentSessionStatus;
+  createdAt: string;
+  updatedAt: string;
+  // ... more fields
+}
+
+export interface CreatePaymentSessionRequest {
+  customerNumber: string;
+  paymentType: PaymentType;
+  invoices: Array<{
+    invoiceId: string;
+    invoiceNumber: string;
+    amount: number;
+  }>;
+  totalAmount: number;
+}
+```
+
+### API Response Types
+
+```typescript
+// src/types/supabase.ts
+
+import type { PageSize, SortDirection } from '@/src/components/data-table/constants';
+
+export type Metadata = Pagination & {
+  totalItems: number;
+  totalPages: number;
+};
+
+export type Pagination = {
+  pageIndex: number;
+  pageSize: PageSize;
+};
+
+export type Sorting<SortKey> = {
+  sortBy: SortKey | null;
+  sortDirection: SortDirection | null;
+};
+
+export type SupabaseResponse<Data> = {
+  data: Data;
+  meta: Metadata;
+};
+```
+
+### Module-Specific Types
+
+```typescript
+// src/app/(authenticated)/rentals/types.ts
+
+import type { ActiveFilter, Pagination, Sorting } from '@/src/types/supabase';
+import type { RentalSortKey, RentalStatus, RentalType } from './constants';
+
+export type Rental = {
+  branchLocation: string | null;
+  branchName: string | null;
+  contractId: number | null;
+  customerNumber: number;
+  endDate: number | null;
+  rentalType: RentalType;
+  status: RentalStatus;
+  // ... more fields
+};
+
+export type RentalsPayload = {
+  contactName: string | null;
+  contractId: string | null;
+  customerNumber: number;
+  // ... more fields
+} & Pagination & Sorting<RentalSortKey>;
+```
+
+## Zod Schemas
+
+### Shared Schemas
+
+```typescript
+// src/schemas/email.ts
+import { z } from 'zod';
+
+export const emailSchema = z
+  .string()
+  .email({ message: 'A valid email address must be provided' });
+
+export const commaSeparatedEmails = z.string().refine(
+  (str) => {
+    const emails = str.split(',').map((e) => e.trim());
+    return emails.every((email) => z.string().email().safeParse(email).success);
+  },
+  { message: 'All email addresses must be valid and comma-separated' }
+);
+```
+
+```typescript
+// src/schemas/phone-number.ts
+import { z } from 'zod';
+import { areaCodes } from './area-codes';
+
+export function validatePhoneNumber(phoneNumber: string) {
+  // Validation logic using area codes
+  const regex = new RegExp(/* ... */);
+  return regex.test(phoneNumber);
+}
+
+export function normalizePhoneNumber(phoneNumber: string) {
+  // Normalize to +1XXXXXXXXXX format
+  let digits = phoneNumber.replace(/\D/g, '');
+  if (digits.startsWith('1') && digits.length === 11) {
+    digits = digits.slice(1);
+  }
+  return `+1${digits}`;
+}
+
+export const phoneNumberSchema = z
+  .string()
+  .min(1, { message: 'A phone number must be provided' })
+  .refine(validatePhoneNumber, {
+    message: 'Invalid phone number'
+  });
+```
+
+```typescript
+// src/schemas/forms.ts
+import { z } from 'zod';
+
+export const firstNameSchema = z.string().min(1, {
+  message: 'A first name must be provided'
+});
+
+export const lastNameSchema = z.string().min(1, {
+  message: 'A last name must be provided'
+});
+```
+
+### Module-Specific Schemas
+
+```typescript
+// src/app/(authenticated)/rentals/schemas.ts
+import { z } from 'zod';
+import { emailSchema } from '@/src/schemas/email';
+import { firstNameSchema, lastNameSchema } from '@/src/schemas/forms';
+import { phoneNumberSchema } from '@/src/schemas/phone-number';
+
+// Base schema for reuse
+export const baseSchema = z.object({
+  branchName: z.string().min(1),
+  companyId: z.string().min(1),
+  customerEmail: z.string().min(1),
+  customerName: z.string().min(1),
+  siteContact: z.object({
+    email: emailSchema.or(z.literal('')),
+    firstName: firstNameSchema,
+    lastName: lastNameSchema,
+    phoneNumber: phoneNumberSchema
+  })
+});
+
+// Extended schema with additional fields
+export const requestPickupFormSchema = baseSchema
+  .extend({
+    dateTime: z
+      .object({
+        date: z.date(),
+        time: z.string()
+      })
+      .partial(),
+    equipment: z
+      .array(z.string())
+      .refine((value) => value.some((item) => item), {
+        message: 'At least one item of equipment must be selected'
+      }),
+    notes: z.string()
+  })
+  .refine(({ dateTime }) => dateTime.date && dateTime.time, {
+    message: 'A pickup date and time must be selected',
+    path: ['dateTime']
+  });
+
+// Infer TypeScript type from schema
+export type RequestPickupFormSchema = z.infer<typeof requestPickupFormSchema>;
+```
+
+### Complex Form Schemas
+
+```typescript
+// src/app/(authenticated)/settings/account/schemas.ts
+import { z } from 'zod';
+import { emailSchema } from '@/src/schemas/email';
+import { firstNameSchema, lastNameSchema } from '@/src/schemas/forms';
+import {
+  normalizePhoneNumber,
+  phoneNumberSchema
+} from '@/src/schemas/phone-number';
+
+export const addressSchema = z.object({
+  address1: z.string().min(1),
+  address2: z.string().optional(),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  zip: z.string().min(1)
+});
+
+export type AddressSchema = z.infer<typeof addressSchema>;
+
+export const contactSchema = z.object({
+  first_name: firstNameSchema,
+  last_name: lastNameSchema
+});
+
+export const billingContactSchema = contactSchema.extend({
+  email: emailSchema,
+  phone_number: phoneNumberSchema.transform(normalizePhoneNumber)
+});
+
+export const accountFormSchema = z.object({
+  company: z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    contact: contactSchema.optional(),
+    address: addressSchema.optional()
+  }),
+  billing: z.object({
+    contact: billingContactSchema.optional(),
+    address: addressSchema.optional()
+  })
+});
+
+export type AccountFormSchema = z.infer<typeof accountFormSchema>;
+```
+
+## Type Inference from Schemas
+
+Always use `z.infer` to derive TypeScript types from Zod schemas:
+
+```typescript
+// ✅ Good - Infer type from schema
+export const requestServiceFormSchema = z.object({
+  equipment: z.string().min(1),
+  reason: z.string().min(1)
+});
+
+export type RequestServiceFormSchema = z.infer<typeof requestServiceFormSchema>;
+
+// ❌ Bad - Don't manually define types that match schemas
+export interface RequestServiceFormSchema {
+  equipment: string;
+  reason: string;
+}
+```
+
+## Usage Examples
+
+### In Server Actions
+
+```typescript
+// src/actions/invite-user.tsx
+'use server';
+
+import type { ShareResponse } from '@/src/types/share';
+
+export async function inviteUser(
+  companyId: string,
+  companyName: string,
+  users: InvitedUser[]
+): Promise<ShareResponse> {
+  // Implementation...
+  return { error: null };
+}
+```
+
+### In Forms with React Hook Form
+
+```typescript
+'use client';
+
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { requestPickupFormSchema, type RequestPickupFormSchema } from './schemas';
+
+export function RequestPickupForm() {
+  const form = useForm<RequestPickupFormSchema>({
+    resolver: zodResolver(requestPickupFormSchema),
+    defaultValues: {
+      // ...
+    }
+  });
+
+  // Use form...
+}
+```
+
+### In API Functions
+
+```typescript
+// src/app/(authenticated)/rentals/api.ts
+import type { RentalsPayload, Rental } from './types';
+import type { SupabaseResponse } from '@/src/types/supabase';
+
+export async function getRentals(
+  payload: RentalsPayload
+): Promise<SupabaseResponse<Rental[]>> {
+  // Implementation...
+  return {
+    data: rentals,
+    meta: {
+      pageIndex: payload.pageIndex,
+      pageSize: payload.pageSize,
+      totalItems: total,
+      totalPages: Math.ceil(total / payload.pageSize)
+    }
+  };
+}
+```
+
+### Schema Validation
+
+```typescript
+// Validate input before processing
+import { requestPickupFormSchema } from './schemas';
+
+export async function requestPickup(data: unknown) {
+  const validation = requestPickupFormSchema.safeParse(data);
+
+  if (!validation.success) {
+    return {
+      error: 'Validation failed: ' + validation.error.message
+    };
+  }
+
+  // TypeScript knows validation.data is RequestPickupFormSchema
+  const { equipment, dateTime } = validation.data;
+  // ...
+}
+```
+
+## Best Practices
+
+1. **Use `z.infer` for types** - Always derive types from schemas when possible
+2. **Co-locate module types** - Put module-specific types in the module folder
+3. **Reuse shared schemas** - Import and extend schemas from `src/schemas/`
+4. **Use descriptive error messages** - Provide clear validation error messages
+5. **Transform data in schemas** - Use `.transform()` for normalization (e.g., phone numbers)
+6. **Extend base schemas** - Use `.extend()` to build complex schemas from simpler ones
+7. **Use refinements for complex validation** - Use `.refine()` for cross-field validation
+8. **Type API responses** - Define types for all API response structures
+9. **Use type unions for status** - Use union types for status/enum values
+10. **Keep types focused** - One type file per domain concern
+
+## Schema Patterns
+
+### Base Schema Pattern
+
+```typescript
+// Define a base schema
+const baseSchema = z.object({
+  name: z.string().min(1),
+  email: emailSchema
+});
+
+// Extend for specific use cases
+const createSchema = baseSchema.extend({
+  password: z.string().min(8)
+});
+
+const updateSchema = baseSchema.partial();
+```
+
+### Conditional Validation
+
+```typescript
+const schema = z.object({
+  type: z.enum(['email', 'phone']),
+  contact: z.string()
+}).refine(
+  (data) => {
+    if (data.type === 'email') {
+      return z.string().email().safeParse(data.contact).success;
+    }
+    return phoneNumberSchema.safeParse(data.contact).success;
+  },
+  { message: 'Invalid contact information' }
+);
+```
+
+### Array Validation
+
+```typescript
+const schema = z.object({
+  items: z
+    .array(z.string())
+    .min(1, { message: 'At least one item is required' })
+    .refine((items) => items.every((item) => item.length > 0), {
+      message: 'All items must be non-empty'
+    })
+});
+```
+
+### Date/Time Validation
+
+```typescript
+const schema = z.object({
+  dateTime: z
+    .object({
+      date: z.date(),
+      time: z.string()
+    })
+    .partial()
+    .refine(({ date, time }) => date && time, {
+      message: 'Both date and time are required',
+      path: ['dateTime']
+    })
+});
+```

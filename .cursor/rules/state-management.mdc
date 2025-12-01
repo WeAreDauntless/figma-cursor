@@ -1,0 +1,481 @@
+---
+description: State management patterns - Remote, URL, Local, and Shared state
+globs:
+  - 'src/**/*.ts'
+  - 'src/**/*.tsx'
+alwaysApply: true
+---
+
+# State Management
+
+State is categorized into **remote**, **URL**, **local**, and **shared** concerns.
+
+For the following globs:
+
+- "src/\*\*/\*.ts"
+- "src/\*\*/\*.tsx"
+
+## Decision Flow
+
+1. **Is the data from a backend?** → Use **TanStack Query**
+2. **Does the state belong in the URL?** → Use **nuqs**
+3. **Is the state only needed in one component?** → Use **useState/useReducer**
+4. **Does the state need to be shared across multiple components?** → Use **Zustand**
+
+## Remote State (Backend Data)
+
+**Tool**: [TanStack Query](https://tanstack.com/query/latest)
+
+Use for data fetched from APIs, databases, or external services.
+
+### When to Use
+
+- ✅ Data fetched from APIs (Supabase RPC functions, etc.)
+- ✅ Needs caching, deduplication, retries, pagination
+- ✅ Shared across multiple components or pages
+- ✅ Needs automatic refetching
+
+### Setup
+
+TanStack Query is configured via `ReactQueryProvider` in the app layout:
+
+```typescript
+// src/providers/react-query.tsx
+'use client';
+
+import { QueryClientProvider } from '@tanstack/react-query';
+import { getQueryClient } from './get-query-client';
+
+export function ReactQueryProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = getQueryClient();
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
+```
+
+### useQuery for GET Requests
+
+```typescript
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import { getRentals } from '@/src/app/(authenticated)/rentals/api';
+import { useCustomer } from '@/src/providers/customer-provider';
+
+export function useRentals(payload: RentalsPayload) {
+  const { customer } = useCustomer();
+  const search = useSearchParamsSerializer(); // For cache key
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['rentals', search],
+    queryFn: () => getRentals(payload),
+    refetchInterval: 1000 * 60, // Refetch every minute
+    refetchIntervalInBackground: true,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: false
+  });
+
+  return { data: data?.data ?? [], isLoading };
+}
+```
+
+### useQuery with Filters
+
+```typescript
+'use client';
+
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { getRentalsFilters } from '@/src/app/(authenticated)/rentals/api';
+
+export function useFilters() {
+  const search = useFiltersSerializer();
+  const [filters] = useFiltersParser();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['rentals_filters', search],
+    queryFn: () => getRentalsFilters(payload),
+    placeholderData: keepPreviousData, // Keep previous data while fetching
+    refetchInterval: 1000 * 60,
+    refetchIntervalInBackground: true,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: false
+  });
+
+  return { data, isLoading };
+}
+```
+
+### useMutation for POST/PUT/DELETE
+
+```typescript
+'use client';
+
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { inviteUser } from '@/src/actions/invite-user';
+
+export function InviteUserForm() {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (users: InvitedUser[]) => {
+      return inviteUser(companyId, companyName, users);
+    },
+    onSuccess: () => {
+      // Invalidate and refetch
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    }
+  });
+
+  async function handleSubmit(users: InvitedUser[]) {
+    mutation.mutate(users);
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* Form fields */}
+      <button disabled={mutation.isPending}>Invite</button>
+      {mutation.isError && <p>Error: {mutation.error.message}</p>}
+    </form>
+  );
+}
+```
+
+## URL State (Query Parameters)
+
+**Tool**: [nuqs](https://github.com/47ng/nuqs)
+
+Use for state that should be shareable via URL or preserved on refresh.
+
+### When to Use
+
+- ✅ UI behavior depends on query params (filters, search, pagination, sorting)
+- ✅ State should be shareable via URL
+- ✅ State should persist on refresh
+- ✅ Table state (filters, pagination, sorting)
+- ❌ Sensitive data (passwords, tokens)
+- ❌ Temporary UI state (hover states, tooltips)
+
+### Server-Side Parsers (Recommended)
+
+Define parsers server-side for type safety and SSR support:
+
+```typescript
+// src/app/(authenticated)/rentals/search-params.ts
+import {
+  createSearchParamsCache,
+  createSerializer,
+  parseAsArrayOf,
+  parseAsIndex,
+  parseAsInteger,
+  parseAsString,
+  parseAsStringLiteral,
+  parseAsTimestamp
+} from 'nuqs/server';
+
+const filters = {
+  contactName: parseAsArrayOf(parseAsString, ARRAY_DELIMITER),
+  contractId: parseAsArrayOf(parseAsInteger, ARRAY_DELIMITER),
+  equipmentNumber: parseAsArrayOf(parseAsString, ARRAY_DELIMITER),
+  rentalDate: parseAsArrayOf(parseAsTimestamp, RANGE_DELIMITER),
+  rentalType: parseAsArrayOf(parseAsStringLiteral(RENTAL_TYPE), ARRAY_DELIMITER)
+};
+
+const parser = {
+  ...filters,
+  search: parseAsString,
+  pageIndex: parseAsIndex.withDefault(0),
+  pageSize: parseAsInteger.withDefault(DEFAULT_PAGE_SIZE),
+  order: parseAsStringLiteral(SORT_DIRECTION),
+  sortKey: parseAsStringLiteral(Object.values(RENTAL_SORT_KEYS))
+};
+
+export const searchParamsCache = createSearchParamsCache(parser);
+export const searchParamsSerializer = createSerializer(parser);
+
+export function useSearchParamsParser() {
+  return useQueryStates(parser);
+}
+```
+
+### Using URL State in Components
+
+```typescript
+'use client';
+
+import { useQueryStates } from 'nuqs';
+import { useSearchParamsParser } from './search-params';
+
+export function RentalsTable() {
+  const [searchParams, setSearchParams] = useSearchParamsParser();
+
+  return (
+    <div>
+      <input
+        value={searchParams.search || ''}
+        onChange={(e) => setSearchParams({ search: e.target.value })}
+      />
+      <button onClick={() => setSearchParams({ pageIndex: searchParams.pageIndex + 1 })}>
+        Next Page
+      </button>
+    </div>
+  );
+}
+```
+
+### Single Query Parameter
+
+```typescript
+'use client';
+
+import { useQueryState, parseAsStringLiteral } from 'nuqs';
+
+const TABLE_VIEW = ['grid', 'list'] as const;
+
+export function ViewOptions() {
+  const [view, setView] = useQueryState('view', parseAsStringLiteral(TABLE_VIEW));
+
+  return (
+    <div>
+      <button onClick={() => setView('grid')}>Grid</button>
+      <button onClick={() => setView('list')}>List</button>
+    </div>
+  );
+}
+```
+
+### Available Parsers
+
+- `parseAsString`
+- `parseAsInteger`
+- `parseAsFloat`
+- `parseAsBoolean`
+- `parseAsStringLiteral(['a', 'b', 'c'])`
+- `parseAsArrayOf(parseAsString)` - For multiple values
+- `parseAsTimestamp` - For dates
+- `parseAsIndex` - For pagination (0-indexed)
+
+## Local State (Component-Only)
+
+**Tool**: React built-ins (`useState`, `useReducer`)
+
+Use for state confined to a single component.
+
+### When to Use
+
+- ✅ State is confined to a single component
+- ✅ Modal open/close, dropdown visibility, input values
+- ✅ Form state (when not using React Hook Form)
+- ❌ Shared across multiple components (use Zustand)
+
+### useState for Simple State
+
+```typescript
+'use client';
+
+import { useState } from 'react';
+
+export function PaymentModal() {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <>
+      <button onClick={() => setIsOpen(true)}>Open Payment</button>
+      {isOpen && (
+        <div>
+          <p>Payment form</p>
+          <button onClick={() => setIsOpen(false)}>Close</button>
+        </div>
+      )}
+    </>
+  );
+}
+```
+
+### useReducer for Complex UI Flows
+
+```typescript
+'use client';
+
+import { useReducer } from 'react';
+
+type State = {
+  step: 'select' | 'payment' | 'confirmation';
+  selectedInvoices: string[];
+  error: string | null;
+};
+
+type Action =
+  | { type: 'SELECT_INVOICE'; invoiceId: string }
+  | { type: 'NEXT_STEP' }
+  | { type: 'SET_ERROR'; error: string };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'SELECT_INVOICE':
+      return {
+        ...state,
+        selectedInvoices: [...state.selectedInvoices, action.invoiceId],
+        error: null
+      };
+    case 'NEXT_STEP':
+      if (state.step === 'select') return { ...state, step: 'payment' };
+      if (state.step === 'payment') return { ...state, step: 'confirmation' };
+      return state;
+    case 'SET_ERROR':
+      return { ...state, error: action.error };
+    default:
+      return state;
+  }
+}
+
+export function PaymentFlow() {
+  const [state, dispatch] = useReducer(reducer, {
+    step: 'select',
+    selectedInvoices: [],
+    error: null
+  });
+
+  // Use state and dispatch...
+}
+```
+
+## Shared State (Cross-Component)
+
+**Tool**: [Zustand](https://github.com/pmndrs/zustand)
+
+Use for state shared across multiple unrelated components (app-specific).
+
+### When to Use
+
+- ✅ Multiple unrelated components need access to the same state
+- ✅ App-specific shared state (mobile menu, UI preferences)
+- ❌ Backend data (use TanStack Query)
+- ❌ URL state (use nuqs)
+- ❌ Module-specific state (consider co-locating in module folder)
+
+### Store Location
+
+- **App-specific stores**: `src/stores/`
+- **Module-specific stores**: Co-locate in module folder (e.g., `src/app/(authenticated)/rentals/store.ts`)
+
+### Simple Store Example
+
+```typescript
+// src/stores/mobile-menu.ts
+import { create } from 'zustand';
+
+export interface MobileMenuState {
+  openMenu: boolean;
+  setOpenMenu: (openMenu: boolean) => void;
+  toggleOpenMenu: () => void;
+}
+
+export const useMobileMenu = create<MobileMenuState>()((set) => ({
+  openMenu: false,
+  setOpenMenu: (openMenu) => {
+    set({ openMenu });
+  },
+  toggleOpenMenu: () => {
+    set(({ openMenu }) => ({ openMenu: !openMenu }));
+  }
+}));
+```
+
+### Using the Store
+
+```typescript
+'use client';
+
+import { useMobileMenu } from '@/src/stores/mobile-menu';
+
+export function MobileMenu() {
+  const openMenu = useMobileMenu((state) => state.openMenu);
+  const closeMenu = useMobileMenu((state) => state.setOpenMenu);
+
+  if (!openMenu) return null;
+
+  return (
+    <div>
+      <button onClick={() => closeMenu(false)}>Close</button>
+    </div>
+  );
+}
+
+export function MobileMenuToggle() {
+  const toggle = useMobileMenu((state) => state.toggleOpenMenu);
+
+  return <button onClick={toggle}>Toggle Menu</button>;
+}
+```
+
+### Module-Specific Store
+
+For state specific to a module (like rentals or invoices), co-locate the store:
+
+```typescript
+// src/app/(authenticated)/rentals/store.ts
+import { create } from 'zustand';
+
+interface RentalsStore {
+  activeFilter: string | null;
+  setActiveFilter: (filter: string | null) => void;
+}
+
+export const useStore = create<RentalsStore>()((set) => ({
+  activeFilter: null,
+  setActiveFilter: (activeFilter) => {
+    set({ activeFilter });
+  }
+}));
+```
+
+## Best Practices
+
+1. **Use TanStack Query for all backend data** - Don't use useState or Zustand for API data
+2. **Use nuqs for URL state** - Filters, pagination, sorting should be in the URL
+3. **Keep Zustand stores minimal** - Only for truly shared UI state
+4. **Co-locate module stores** - Put module-specific stores in the module folder
+5. **Use server-side parsers** - Define nuqs parsers server-side for type safety
+6. **Cache keys should include URL params** - Use serialized search params in TanStack Query keys
+7. **Refetch intervals** - Set appropriate refetch intervals for data that changes frequently
+8. **Use placeholderData** - Keep previous data visible while fetching new data
+
+## Common Patterns
+
+### Combining URL State with TanStack Query
+
+```typescript
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import { useSearchParamsSerializer } from './search-params';
+import { getRentals } from './api';
+
+export function useRentals() {
+  const search = useSearchParamsSerializer(); // Serialize URL params for cache key
+  const [searchParams] = useSearchParamsParser();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['rentals', search], // Include serialized params in key
+    queryFn: () => getRentals(buildPayload(searchParams)),
+    refetchInterval: 1000 * 60
+  });
+
+  return { data: data?.data ?? [], isLoading };
+}
+```
+
+### Server Component with URL State
+
+```typescript
+// src/app/(authenticated)/rentals/page.tsx
+import { searchParamsCache } from './search-params';
+
+export default async function RentalsPage(props: PageProps) {
+  const searchParams = await searchParamsCache.parse(props.searchParams);
+
+  // Use searchParams in server component
+  return <RentalsTable initialParams={searchParams} />;
+}
+```

@@ -1,0 +1,334 @@
+# Coding Principles and Best Practices
+
+This file contains fundamental coding principles that should be applied throughout the codebase.
+
+## DRY Principle (Don't Repeat Yourself)
+
+### Core Concept
+**Every piece of knowledge must have a single, unambiguous, authoritative representation within a system.**
+
+### Key Principles
+
+1. **Eliminate Duplication**
+   - Don't copy and paste code between files or functions
+   - Don't repeat the same logic in multiple places
+   - Extract common functionality into reusable utilities, functions, or modules
+   - Use the appropriate abstraction layer (lib/, components/, hooks/, etc.)
+
+2. **Single Source of Truth**
+   - Each piece of knowledge/logic should exist in only one place
+   - Changes should only need to be made in one location
+   - One authoritative source for each concept or piece of functionality
+   - Updates propagate automatically to all usages
+
+3. **Abstraction Over Duplication**
+   - Create abstractions that can be shared across the codebase
+   - Use parameters and configuration to handle variations
+   - Leverage TypeScript generics for type-safe reusable code
+   - Follow the monorepo's layered architecture (global → app-specific → feature-specific)
+
+### When to Apply DRY
+
+✅ **DO apply DRY when:**
+
+- You're copying and pasting code between files
+- The same validation logic appears in multiple places
+- Multiple components share identical utility functions
+- Database queries are duplicated across features
+- API client logic is repeated
+- Type definitions are duplicated
+- Configuration values are hardcoded in multiple files
+
+**Example - Validation Logic:**
+
+```typescript
+// ❌ BAD: Duplicated validation
+function validateUserEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validateContactEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validateInvitationEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// ✅ GOOD: Single source of truth
+// In lib/validation.ts
+export function validateEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// Usage across the app
+import { validateEmail } from '@/lib/validation';
+
+const userEmailValid = validateEmail(userEmail);
+const contactEmailValid = validateEmail(contactEmail);
+const invitationEmailValid = validateEmail(invitationEmail);
+```
+
+**Example - Data Fetching:**
+
+```typescript
+// ❌ BAD: Duplicated query logic
+async function getUserOrganizations(userId: string) {
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function getAdminOrganizations(userId: string) {
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// ✅ GOOD: Single reusable query
+// In features/organizations/queries/get-user-organizations.ts
+export async function getUserOrganizations(userId: string) {
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// Reuse everywhere
+import { getUserOrganizations } from '@/features/organizations/queries';
+const orgs = await getUserOrganizations(userId);
+```
+
+**Example - Component Patterns:**
+
+```typescript
+// ❌ BAD: Duplicated component logic
+function UserCard({ user }: { user: User }) {
+  return (
+    <div className="rounded-lg border p-4 shadow-sm">
+      <h3 className="font-semibold">{user.name}</h3>
+      <p className="text-muted-foreground text-sm">{user.email}</p>
+    </div>
+  );
+}
+
+function ContactCard({ contact }: { contact: Contact }) {
+  return (
+    <div className="rounded-lg border p-4 shadow-sm">
+      <h3 className="font-semibold">{contact.name}</h3>
+      <p className="text-muted-foreground text-sm">{contact.email}</p>
+    </div>
+  );
+}
+
+// ✅ GOOD: Generic reusable component
+interface CardProps {
+  title: string;
+  subtitle: string;
+}
+
+function InfoCard({ title, subtitle }: CardProps) {
+  return (
+    <div className="rounded-lg border p-4 shadow-sm">
+      <h3 className="font-semibold">{title}</h3>
+      <p className="text-muted-foreground text-sm">{subtitle}</p>
+    </div>
+  );
+}
+
+// Usage
+<InfoCard title={user.name} subtitle={user.email} />
+<InfoCard title={contact.name} subtitle={contact.email} />
+```
+
+### When NOT to Apply DRY
+
+⚠️ **DON'T force DRY when:**
+
+- **Code is used only once**: Don't create abstractions for single-use code
+- **Concepts are fundamentally different**: Similar-looking code might serve different purposes
+- **It reduces readability**: Sometimes a little duplication is clearer than complex abstraction
+- **It's premature**: Wait until you have 2-3 instances before abstracting
+- **Domain logic differs**: User authentication vs. API authentication may look similar but have different requirements
+- **It couples unrelated features**: Don't force unrelated features to share code just to avoid duplication
+
+**Example - When Duplication is OK:**
+
+```typescript
+// ✅ ACCEPTABLE: Different business contexts
+function calculateUserDiscount(user: User): number {
+  // User-specific discount logic (loyalty points, tier, etc.)
+  return user.loyaltyPoints * 0.01;
+}
+
+function calculateProductDiscount(product: Product): number {
+  // Product-specific discount logic (sale price, category, etc.)
+  return product.salePrice ? product.price - product.salePrice : 0;
+}
+
+// These look similar but represent different business concepts
+// Forcing them into one function would create coupling and confusion
+```
+
+**Example - Premature Abstraction:**
+
+```typescript
+// ⚠️ TOO EARLY: Only used once
+function formatUserName(firstName: string, lastName: string): string {
+  return `${firstName} ${lastName}`;
+}
+
+const fullName = formatUserName(user.firstName, user.lastName);
+
+// ✅ BETTER: Just inline it until you need it elsewhere
+const fullName = `${user.firstName} ${user.lastName}`;
+
+// Only create the function when you use it in 2-3 places
+```
+
+### Application in This Codebase
+
+**Utilize the Monorepo Structure:**
+
+1. **Global utilities** (`packages/ui/src/lib/`):
+   - Pure functions used across multiple apps
+   - Example: `cn()`, `formatDate()`, `slugify()`
+
+2. **App-specific utilities** (`apps/app/src/lib/`):
+   - Utilities specific to the main app
+   - Example: `permissions.ts`, `redirect.ts`
+
+3. **Feature-specific logic** (`apps/app/src/features/`):
+   - Domain-specific logic that shouldn't be shared
+   - Example: `features/organizations/api.ts`
+
+4. **Shared components** (`packages/ui/src/components/`):
+   - Reusable UI patterns
+   - Example: DataTable, forms, layouts
+
+**Decision Flow:**
+
+```
+Is the code used in multiple places?
+  NO → Keep it local, don't abstract yet
+  YES → Continue...
+
+Does it serve the same purpose/domain?
+  NO → Keep separate (different business contexts)
+  YES → Continue...
+
+Is it pure logic or UI?
+  Pure Logic → Extract to lib/ or features/
+  UI → Extract to components/
+  Hook → Extract to hooks/
+
+Is it app-specific or global?
+  App-specific → apps/app/src/[lib|components|hooks]/
+  Global → packages/ui/src/[lib|components|hooks]/
+```
+
+### Benefits of DRY
+
+✅ **Maintainability**
+- Fix bugs in one place instead of hunting down duplicates
+- Easier to update logic consistently across the application
+- Reduces the risk of inconsistencies
+
+✅ **Reliability**
+- Less chance of forgetting to update a duplicate
+- Single point of failure instead of multiple scattered issues
+- More predictable behavior
+
+✅ **Efficiency**
+- Less code to write and maintain
+- Faster development once abstractions are in place
+- Easier to understand the codebase
+
+✅ **Type Safety**
+- Single definition ensures consistent types
+- TypeScript can catch errors at compile time
+- Better IDE support and autocomplete
+
+### Red Flags (Signs of DRY Violations)
+
+🚩 **Watch out for:**
+
+- Copy-pasted code with minor modifications
+- Multiple functions with nearly identical implementations
+- Repeated validation logic
+- Duplicated type definitions
+- Hardcoded values repeated across files
+- Similar API calls with slight variations
+- Identical component structures with different props
+
+### How to Refactor Violations
+
+**Step 1: Identify the Pattern**
+- Find the common logic across duplicates
+- Identify what varies between instances
+
+**Step 2: Extract to Appropriate Layer**
+- Choose the right location based on usage (global vs app-specific)
+- Create a well-named function/component/hook
+
+**Step 3: Parameterize Variations**
+- Use function parameters for variations
+- Use TypeScript generics for type flexibility
+- Use configuration objects for complex options
+
+**Step 4: Update All Usages**
+- Replace duplicates with calls to the new abstraction
+- Run tests to ensure behavior is preserved
+- Update documentation if needed
+
+**Example Refactoring:**
+
+```typescript
+// Step 1: Identify duplicated pattern
+// In multiple files:
+const org1 = await supabase.from('organizations').select('*').eq('id', id1);
+const org2 = await supabase.from('organizations').select('*').eq('id', id2);
+
+// Step 2: Extract to features/organizations/queries/
+export async function getOrganizationById(id: string) {
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// Step 3: Add type safety
+export async function getOrganizationById(
+  id: string
+): Promise<Organization> {
+  // ... implementation
+}
+
+// Step 4: Update all usages
+import { getOrganizationById } from '@/features/organizations/queries';
+const org = await getOrganizationById(id);
+```
+
+## Summary
+
+- **DRY is a guideline, not a law**: Use judgment
+- **Balance with readability**: Clear code beats clever abstraction
+- **Wait for patterns to emerge**: Don't abstract prematurely
+- **Use the monorepo structure**: Put code in the right layer
+- **Keep abstractions simple**: Easy to understand and use
+- **Document your abstractions**: Help others use them correctly
