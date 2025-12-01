@@ -44,7 +44,7 @@ export function DashboardHero() {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7 mb-8">
       {/* Revenue Overview Section */}
-      <Card className="col-span-4 lg:col-span-4">
+      <Card className="col-span-4 lg:col-span-4 border-none shadow-[0px_24px_60px_rgba(15,23,42,0.08)]">
         <CardHeader>
           <CardTitle>Revenue Overview</CardTitle>
           <CardDescription>
@@ -106,7 +106,7 @@ export function DashboardHero() {
       </Card>
 
       {/* Activity Overview Section */}
-      <Card className="col-span-4 lg:col-span-3">
+      <Card className="col-span-4 lg:col-span-3 border-none shadow-[0px_24px_60px_rgba(15,23,42,0.08)]">
         <CardHeader>
           <CardTitle>Activity Overview</CardTitle>
           <CardDescription>
