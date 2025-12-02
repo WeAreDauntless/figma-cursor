@@ -1,0 +1,391 @@
+---
+description: Testing guidelines for app-specific code
+alwaysApply: false
+---
+# Testing Guidelines for App
+
+For the following globs:
+  - "**/__tests__/**/*.ts"
+  - "**/__tests__/**/*.tsx"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "e2e/**/*.spec.ts"
+
+## Testing Stack
+
+- **Vitest** for unit and component tests
+- **React Testing Library** for component testing
+- **Playwright** for E2E testing
+- **MSW (Mock Service Worker)** for API mocking
+- **@testing-library/jest-dom** for custom matchers
+- **happy-dom** as the test environment
+
+## Running Tests
+
+```bash
+# Unit & component tests
+pnpm test                 # Run all tests
+pnpm test:watch           # Watch mode
+pnpm test:coverage        # With coverage
+pnpm test:ui              # Open Vitest UI
+
+# E2E tests
+pnpm test:e2e             # Run E2E tests
+pnpm test:e2e:ui          # Run with Playwright UI
+
+# Package-specific
+pnpm test --filter=app    # Test app only
+```
+
+## Test Organization
+
+```
+apps/app/
+  src/
+    app/__tests__/              # Page/route tests
+    features/
+      organizations/
+        __tests__/              # Feature tests
+          server-api.test.ts
+    lib/__tests__/              # Utility tests
+    components/__tests__/       # Component tests
+  e2e/                          # E2E tests
+    auth.spec.ts
+    workspaces.spec.ts
+```
+
+## Testing Server Actions
+
+```typescript
+// src/app/actions/__tests__/workspaces.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createWorkspace } from '../workspaces';
+
+// Mock the feature layer
+vi.mock('@/features/workspaces/server-api', () => ({
+  createWorkspaceWithAuth: vi.fn(),
+}));
+
+describe('createWorkspace', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('validates input', async () => {
+    const formData = new FormData();
+    formData.set('name', ''); // Invalid - empty name
+
+    const result = await createWorkspace(formData);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+  });
+
+  it('creates workspace successfully', async () => {
+    const { createWorkspaceWithAuth } = await import(
+      '@/features/workspaces/server-api'
+    );
+
+    vi.mocked(createWorkspaceWithAuth).mockResolvedValue({
+      workspace: { id: '1', name: 'Test Workspace' },
+      error: null,
+    });
+
+    const formData = new FormData();
+    formData.set('name', 'Test Workspace');
+    formData.set('organizationId', 'org-123');
+
+    const result = await createWorkspace(formData);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+  });
+
+  it('handles errors from feature layer', async () => {
+    const { createWorkspaceWithAuth } = await import(
+      '@/features/workspaces/server-api'
+    );
+
+    vi.mocked(createWorkspaceWithAuth).mockResolvedValue({
+      workspace: null,
+      error: 'Unauthorized',
+    });
+
+    const formData = new FormData();
+    formData.set('name', 'Test Workspace');
+    formData.set('organizationId', 'org-123');
+
+    const result = await createWorkspace(formData);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Unauthorized');
+  });
+});
+```
+
+## Testing Features
+
+```typescript
+// src/features/workspaces/__tests__/server-api.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { fetchWorkspaceWithAuth } from '../server-api';
+
+// Mock Supabase
+vi.mock('@/integrations/database/supabase/server', () => ({
+  createClient: vi.fn(() => ({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({
+        data: { user: { id: 'user-123', email: 'test@example.com' } },
+        error: null,
+      }),
+    },
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          single: vi.fn().mockResolvedValue({
+            data: {
+              id: 'workspace-123',
+              name: 'Test Workspace',
+              organization_id: 'org-123',
+            },
+            error: null,
+          }),
+        })),
+      })),
+    })),
+  })),
+}));
+
+describe('fetchWorkspaceWithAuth', () => {
+  it('returns workspace with permissions', async () => {
+    const result = await fetchWorkspaceWithAuth('workspace-123');
+
+    expect(result.workspace).toBeDefined();
+    expect(result.workspace?.id).toBe('workspace-123');
+    expect(result.workspace?.canManage).toBeDefined();
+    expect(result.error).toBeNull();
+  });
+
+  it('returns error when user is not authenticated', async () => {
+    const { createClient } = await import(
+      '@/integrations/database/supabase/server'
+    );
+
+    vi.mocked(createClient).mockReturnValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: null },
+          error: { message: 'Not authenticated' },
+        }),
+      },
+    } as any);
+
+    const result = await fetchWorkspaceWithAuth('workspace-123');
+
+    expect(result.workspace).toBeNull();
+    expect(result.error).toBe('Unauthorized');
+  });
+});
+```
+
+## Testing Components with Server Actions
+
+```typescript
+// src/components/__tests__/create-workspace-form.test.tsx
+import { render, screen } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
+import { describe, it, expect, vi } from 'vitest';
+import { CreateWorkspaceForm } from '../create-workspace-form';
+
+vi.mock('@/app/actions/workspaces', () => ({
+  createWorkspace: vi.fn(),
+}));
+
+describe('CreateWorkspaceForm', () => {
+  it('submits form data', async () => {
+    const { createWorkspace } = await import('@/app/actions/workspaces');
+
+    vi.mocked(createWorkspace).mockResolvedValue({
+      success: true,
+      data: { id: '1', name: 'Test Workspace' },
+    });
+
+    render(<CreateWorkspaceForm />);
+
+    const input = screen.getByLabelText(/workspace name/i);
+    const button = screen.getByRole('button', { name: /create/i });
+
+    await userEvent.type(input, 'My Workspace');
+    await userEvent.click(button);
+
+    expect(createWorkspace).toHaveBeenCalled();
+  });
+
+  it('displays error message on failure', async () => {
+    const { createWorkspace } = await import('@/app/actions/workspaces');
+
+    vi.mocked(createWorkspace).mockResolvedValue({
+      success: false,
+      error: 'Failed to create workspace',
+    });
+
+    render(<CreateWorkspaceForm />);
+
+    const button = screen.getByRole('button', { name: /create/i });
+    await userEvent.click(button);
+
+    expect(await screen.findByText(/failed to create workspace/i)).toBeInTheDocument();
+  });
+});
+```
+
+## Testing with TanStack Query
+
+```typescript
+// src/components/__tests__/workspace-list.test.tsx
+import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { describe, it, expect, vi } from 'vitest';
+import { WorkspaceList } from '../workspace-list';
+
+vi.mock('@/features/workspaces/client-api', () => ({
+  fetchWorkspaces: vi.fn().mockResolvedValue({
+    workspaces: [
+      { id: '1', name: 'Workspace 1' },
+      { id: '2', name: 'Workspace 2' },
+    ],
+    error: null,
+  }),
+}));
+
+describe('WorkspaceList', () => {
+  it('renders workspaces', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WorkspaceList />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Workspace 1')).toBeInTheDocument();
+      expect(screen.getByText('Workspace 2')).toBeInTheDocument();
+    });
+  });
+});
+```
+
+## E2E Testing with Playwright
+
+```typescript
+// e2e/workspaces.spec.ts
+import { test, expect } from '@playwright/test';
+
+test.describe('Workspaces', () => {
+  test.beforeEach(async ({ page }) => {
+    // Login before each test
+    await page.goto('/login');
+    await page.fill('input[name="email"]', 'test@example.com');
+    await page.fill('input[name="password"]', 'password123');
+    await page.click('button[type="submit"]');
+    await page.waitForURL('/dashboard');
+  });
+
+  test('should create a new workspace', async ({ page }) => {
+    await page.goto('/workspaces');
+    await page.click('button:has-text("New Workspace")');
+
+    await page.fill('input[name="name"]', 'Test Workspace');
+    await page.click('button:has-text("Create")');
+
+    await expect(page).toHaveURL(/\/workspaces\/[a-z0-9-]+/);
+    await expect(page.locator('h1')).toHaveText('Test Workspace');
+  });
+
+  test('should list workspaces', async ({ page }) => {
+    await page.goto('/workspaces');
+
+    await expect(page.locator('[data-testid="workspace-item"]')).toHaveCount(3);
+  });
+
+  test('should delete a workspace', async ({ page }) => {
+    await page.goto('/workspaces');
+
+    const workspace = page.locator('[data-testid="workspace-item"]').first();
+    await workspace.locator('button[aria-label="Delete"]').click();
+
+    await page.click('button:has-text("Confirm")');
+
+    await expect(page.locator('[data-testid="workspace-item"]')).toHaveCount(2);
+  });
+});
+```
+
+## Mock Service Worker (MSW)
+
+For mocking API requests:
+
+```typescript
+// src/mocks/handlers.ts
+import { http, HttpResponse } from 'msw';
+
+export const handlers = [
+  http.get('/api/workspaces', () => {
+    return HttpResponse.json({
+      workspaces: [
+        { id: '1', name: 'Workspace 1' },
+        { id: '2', name: 'Workspace 2' },
+      ],
+    });
+  }),
+
+  http.post('/api/workspaces', async ({ request }) => {
+    const data = await request.json();
+    return HttpResponse.json({
+      workspace: { id: '3', ...data },
+    });
+  }),
+];
+
+// src/mocks/server.ts
+import { setupServer } from 'msw/node';
+import { handlers } from './handlers';
+
+export const server = setupServer(...handlers);
+
+// packages/test-config/setup.ts
+import { beforeAll, afterEach, afterAll } from 'vitest';
+import { server } from '../src/mocks/server';
+
+beforeAll(() => server.listen());
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+```
+
+## Best Practices
+
+1. **Aim for 80% code coverage minimum**
+2. **Test user behavior**, not implementation details
+3. **Mock external dependencies** (database, APIs, email)
+4. **Use semantic queries** (getByRole, getByLabelText)
+5. **Keep tests focused and atomic** (one concept per test)
+6. **Use `beforeEach` for setup**, avoid test interdependencies
+7. **Test error scenarios** and edge cases
+8. **Run tests before committing**: `pnpm test && pnpm test:e2e`
+
+## Coverage Requirements
+
+Run coverage report:
+
+```bash
+pnpm test:coverage --filter=app
+```
+
+Focus on:
+- ✅ Server Actions (input validation, error handling)
+- ✅ Features (business logic, permissions)
+- ✅ Utilities (edge cases, error scenarios)
+- ✅ Critical user flows (E2E)

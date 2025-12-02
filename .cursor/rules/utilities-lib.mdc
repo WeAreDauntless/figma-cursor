@@ -1,0 +1,284 @@
+---
+description: App-specific utilities and cross-cutting concerns
+globs:
+  - "src/utils/**/*.ts"
+  - "src/lib/**/*.ts"
+alwaysApply: true
+---
+
+# App-Specific Utilities
+
+Utilities in `src/utils/` and `src/lib/` are **app-specific** cross-cutting concerns used across the application.
+
+For the following globs:
+
+- "src/utils/\*\*/\*.ts"
+- "src/lib/\*\*/\*.ts"
+
+## When to Create Utilities
+
+### `src/utils/` (Most utilities)
+
+Create a utility function when:
+
+- ✅ Pure function used across multiple modules
+- ✅ Data transformation helper (formatting, parsing, conversion)
+- ✅ Type guard or validation helper
+- ✅ Browser storage wrapper (localStorage, sessionStorage)
+- ✅ Analytics or logging helper
+- ✅ String/array/number manipulation used in multiple places
+- ❌ Module-specific logic (belongs in module folder)
+- ❌ External service integration (belongs in `services/`)
+- ❌ Business logic (belongs in modules or services)
+
+### `src/lib/` (Framework/config utilities)
+
+Create in `lib/` when:
+
+- ✅ Next.js-specific configuration (fonts, etc.)
+- ✅ App-level setup code
+- ❌ Business logic utilities (use `utils/`)
+
+## Key Principles
+
+1. **Stateless** - Utilities should not maintain state
+2. **Pure** - Avoid side effects when possible (except for storage/analytics)
+3. **Reusable** - Should be useful across multiple modules
+4. **Focused** - One utility per file, or group closely related utilities
+5. **Well-typed** - Use proper TypeScript types
+
+## File Structure
+
+```
+src/utils/
+  analytics.ts              # Analytics tracking
+  currency.ts               # Currency formatting/parsing
+  invoice.ts                # Invoice ID parsing
+  is-defined.ts             # Type guards
+  payment-storage.ts        # Browser storage utilities
+  split-comma.ts            # String utilities
+  # ... more utilities
+
+src/lib/
+  fonts.ts                  # Next.js font configuration
+```
+
+## Utility Function Structure
+
+### Simple Pure Function
+
+```typescript
+// src/utils/split-comma.ts
+
+/**
+ * Split comma-separated string into array, trimming whitespace
+ * @param text - Comma-separated string
+ * @returns Array of trimmed strings
+ */
+export function splitComma(text: string): string[] {
+  return text.split(/\s*,\s*/).map((s) => s.trim());
+}
+```
+
+### Type Guard
+
+```typescript
+// src/utils/is-defined.ts
+
+/**
+ * Type guard to check if value is defined (not null or undefined)
+ * @param value - Value to check
+ * @returns True if value is defined
+ */
+export function isDefined<T>(value: T | null | undefined): value is T {
+  return value != null;
+}
+```
+
+### Browser Storage Utility
+
+```typescript
+// src/utils/payment-storage.ts
+
+import type { PaymentState } from "@/src/types/payment";
+
+const PAYMENT_PREFIX = "payment_";
+const PAYMENT_EXPIRY_MS = 1000 * 60 * 60; // 1 hour
+
+/**
+ * Store payment state in browser sessionStorage
+ * @param invoiceId - Invoice ID
+ * @param state - Payment state to store
+ */
+export function setPaymentState(invoiceId: string, state: PaymentState): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const paymentKey = `${PAYMENT_PREFIX}${invoiceId}`;
+  const stateWithExpiry = {
+    ...state,
+    expiresAt: Date.now() + PAYMENT_EXPIRY_MS,
+  };
+
+  try {
+    sessionStorage.setItem(paymentKey, JSON.stringify(stateWithExpiry));
+  } catch (error) {
+    console.warn("Failed to save payment state:", error);
+  }
+}
+
+/**
+ * Retrieve payment state from browser sessionStorage
+ * @param invoiceId - Invoice ID
+ * @returns Payment state or null if not found/expired
+ */
+export function getPaymentState(invoiceId: string): PaymentState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const paymentKey = `${PAYMENT_PREFIX}${invoiceId}`;
+
+  try {
+    const stored = sessionStorage.getItem(paymentKey);
+    if (!stored) {
+      return null;
+    }
+
+    const parsed = JSON.parse(stored) as PaymentState & { expiresAt: number };
+
+    // Check if expired
+    if (Date.now() > parsed.expiresAt) {
+      clearPaymentState(invoiceId);
+      return null;
+    }
+
+    // Remove expiry before returning
+    const { expiresAt: _, ...state } = parsed;
+    return state;
+  } catch (error) {
+    console.warn("Failed to retrieve payment state:", error);
+    clearPaymentState(invoiceId);
+    return null;
+  }
+}
+```
+
+### Formatting Utility
+
+```typescript
+// src/utils/currency.ts
+
+/**
+ * Format number as currency string
+ * @param amount - Amount to format
+ * @returns Formatted currency string (e.g., "$1,234.56")
+ */
+export function formatNumberToCurrency(amount: number): string {
+  return (
+    "$" +
+    amount.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  );
+}
+
+/**
+ * Parse currency string to number
+ * @param currencyString - Currency string (e.g., "$1,234.56")
+ * @returns Parsed number
+ */
+export function parseCurrencyToNumber(currencyString: string): number {
+  const cleanValue = currencyString.replace(/[$,]/g, "");
+  return parseFloat(cleanValue) || 0;
+}
+```
+
+## Naming Conventions
+
+- **Functions**: Use **verb + noun** structure
+  - `formatCurrency`, `parseDate`, `splitInvoiceId`
+  - `isDefined`, `isArrayOfNumbers` (type guards)
+- **Be descriptive**: `formatNumberToCurrency`, not `formatCurrency`
+- **Use camelCase** for functions
+- **Constants**: Use UPPER_SNAKE_CASE
+- **Type guards**: Start with `is`: `isDefined`, `isArrayOfNumbers`
+
+## Dependency Rules
+
+App utilities (`src/utils/`, `src/lib/`) can import from:
+
+- ✅ `types/` (for type definitions)
+- ✅ Workspace packages (`@repo/ui`, etc.)
+- ✅ External packages
+- ❌ Module folders (utilities should be module-independent)
+- ❌ `services/` (utilities should be pure when possible)
+
+```typescript
+// Good
+import type { PaymentState } from "@/src/types/payment";
+import cn from "@utils/cn";
+
+// Bad
+import { getRentals } from "@/src/app/(authenticated)/rentals/api";
+```
+
+## Best Practices
+
+1. **Keep utilities pure** - Avoid side effects when possible
+2. **Handle edge cases** - Check for null/undefined, empty strings, etc.
+3. **Use TypeScript types** - Provide proper types for parameters and return values
+4. **Add JSDoc comments** - Document complex utilities
+5. **Check browser APIs** - Use `typeof window !== 'undefined'` for browser-only code
+6. **Handle errors gracefully** - Use try/catch for storage operations
+7. **Make utilities reusable** - Don't hardcode module-specific logic
+8. **Use type guards** - Create type guards for runtime type checking
+9. **Test utilities** - Write tests for utility functions
+10. **Keep utilities focused** - One utility per file, or group closely related utilities
+
+## Common Patterns
+
+### Browser Storage Pattern
+
+Always check for `window` and handle errors:
+
+```typescript
+export function getFromStorage<T>(key: string): T | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : null;
+  } catch (error) {
+    console.warn("Failed to retrieve from storage:", error);
+    return null;
+  }
+}
+```
+
+### Type Guard Pattern
+
+```typescript
+export function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+export function isNumber(value: unknown): value is number {
+  return typeof value === "number" && !isNaN(value);
+}
+```
+
+### Formatting Pattern
+
+```typescript
+export function formatValue(value: number | string): string {
+  if (typeof value === "number") {
+    return value.toLocaleString();
+  }
+  return value;
+}
+```

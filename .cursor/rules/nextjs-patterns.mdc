@@ -1,0 +1,506 @@
+---
+description: Next.js 15+ patterns and best practices for App Router
+globs:
+  - 'src/app/**/*.ts'
+  - 'src/app/**/*.tsx'
+alwaysApply: true
+---
+
+# Next.js 15+ Patterns
+
+Best practices for Next.js 15 with App Router, React Server Components, and modern features.
+
+For the following globs:
+
+- "src/app/\*_/_.ts"
+- "src/app/\*_/_.tsx"
+
+## React Server Components (RSC)
+
+**Use Server Components by default** - only use Client Components when needed.
+
+### Server Component (Default)
+
+```typescript
+// src/app/(authenticated)/(dashboard)/@rentals/page.tsx
+import { getRentalsOverview } from '@/src/app/(authenticated)/rentals/api';
+
+export default async function RentalsPage() {
+  const { rentals } = await getRentalsOverview();
+
+  return (
+    <div>
+      <h1>Rentals</h1>
+      <ul>
+        {rentals.map((rental) => (
+          <li key={rental.id}>{rental.equipmentNumber}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+### Client Component (When Needed)
+
+Use `'use client'` for:
+
+- ✅ Interactive elements (onClick, onChange, etc.)
+- ✅ React hooks (useState, useEffect, etc.)
+- ✅ Browser APIs (localStorage, window, etc.)
+- ✅ TanStack Query, Zustand, etc.
+
+```typescript
+// src/components/InteractiveButton.tsx
+'use client';
+
+import { useState } from 'react';
+
+export function InteractiveButton() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <button onClick={() => setCount(count + 1)}>
+      Clicked {count} times
+    </button>
+  );
+}
+```
+
+## Layouts and Pages
+
+### Root Layout
+
+```typescript
+// src/app/layout.tsx
+import type { Metadata } from 'next';
+import './globals.css';
+
+export const metadata: Metadata = {
+  title: {
+    default: 'My App',
+    template: '%s | My App',
+  },
+  description: 'My awesome app',
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+### Nested Layout
+
+```typescript
+// src/app/(authenticated)/layout.tsx
+import { redirect } from 'next/navigation';
+import { getCustomer } from '@repo/auth/server/actions/get-customer';
+
+export default async function AuthenticatedLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const customer = await getCustomer();
+
+  if (!customer) {
+    redirect('/log-in');
+  }
+
+  return (
+    <div className="flex">
+      <aside>Sidebar</aside>
+      <main>{children}</main>
+    </div>
+  );
+}
+```
+
+### Page with Dynamic Route
+
+```typescript
+// src/app/(authenticated)/invoices/[...invoiceDetail]/page.tsx
+import { getInvoiceDetail } from '@/src/app/(authenticated)/invoices/api';
+import { notFound } from 'next/navigation';
+
+interface PageProps {
+  params: Promise<{ invoiceDetail: string[] }>;
+}
+
+export default async function InvoiceDetailPage({ params }: PageProps) {
+  const { invoiceDetail } = await params;
+  const invoiceId = invoiceDetail[0];
+
+  const { invoice, error } = await getInvoiceDetail(invoiceId);
+
+  if (error || !invoice) {
+    notFound();
+  }
+
+  return (
+    <div>
+      <h1>Invoice {invoice.invoiceNumber}</h1>
+    </div>
+  );
+}
+```
+
+## Loading and Error States
+
+### Loading UI
+
+```typescript
+// src/app/dashboard/loading.tsx
+export default function Loading() {
+  return <div>Loading...</div>;
+}
+```
+
+### Error UI
+
+```typescript
+// src/app/dashboard/error.tsx
+'use client';
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <button onClick={() => reset()}>Try again</button>
+    </div>
+  );
+}
+```
+
+### Not Found
+
+```typescript
+// src/app/(authenticated)/rentals/[id]/not-found.tsx
+export default function NotFound() {
+  return (
+    <div>
+      <h2>Rental Not Found</h2>
+      <p>The rental you're looking for doesn't exist.</p>
+    </div>
+  );
+}
+```
+
+## Suspense Boundaries
+
+Use Suspense for streaming SSR and better loading states.
+
+```typescript
+// src/app/(authenticated)/(dashboard)/page.tsx
+import { Suspense } from 'react';
+import { RentalsOverview } from '@/src/app/(authenticated)/(dashboard)/@rentals/page';
+import { InvoicesOverview } from '@/src/app/(authenticated)/(dashboard)/@invoices/page';
+
+export default function DashboardPage() {
+  return (
+    <div>
+      <h1>Dashboard</h1>
+
+      <Suspense fallback={<div>Loading rentals...</div>}>
+        <RentalsOverview />
+      </Suspense>
+
+      <Suspense fallback={<div>Loading invoices...</div>}>
+        <InvoicesOverview />
+      </Suspense>
+    </div>
+  );
+}
+```
+
+## Server Actions
+
+See [@server-actions.mdc](./server-actions.mdc) for detailed Server Actions patterns.
+
+### Form with Server Action
+
+```typescript
+// src/actions/invite-user.tsx
+'use server';
+
+export async function inviteUser(formData: FormData) {
+  // Implementation...
+}
+
+// src/components/invite-user-form.tsx
+import { inviteUser } from '@/src/actions/invite-user';
+
+export function InviteUserForm() {
+  return (
+    <form action={inviteUser}>
+      <input name="email" />
+      <button>Invite</button>
+    </form>
+  );
+}
+```
+
+## Metadata API
+
+### Static Metadata
+
+```typescript
+// src/app/about/page.tsx
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'About',
+  description: 'Learn more about us',
+};
+
+export default function AboutPage() {
+  return <div>About</div>;
+}
+```
+
+### Dynamic Metadata
+
+```typescript
+// src/app/(authenticated)/invoices/[...invoiceDetail]/page.tsx
+import type { Metadata } from 'next';
+import { getInvoiceDetail } from '@/src/app/(authenticated)/invoices/api';
+
+interface PageProps {
+  params: Promise<{ invoiceDetail: string[] }>;
+}
+
+export async function generateMetadata({
+  params
+}: PageProps): Promise<Metadata> {
+  const { invoiceDetail } = await params;
+  const invoiceId = invoiceDetail[0];
+  const { invoice } = await getInvoiceDetail(invoiceId);
+
+  return {
+    title: invoice?.invoiceNumber || 'Invoice',
+    description: `Invoice ${invoice?.invoiceNumber}`
+  };
+}
+
+export default async function InvoiceDetailPage({ params }: PageProps) {
+  // Page implementation...
+}
+```
+
+## Data Fetching Patterns
+
+### Parallel Data Fetching
+
+```typescript
+import { getRentalsOverview } from '@/src/app/(authenticated)/rentals/api';
+import { getInvoicesOverview } from '@/src/app/(authenticated)/invoices/api';
+
+export default async function DashboardPage() {
+  // These run in parallel
+  const [rentals, invoices] = await Promise.all([
+    getRentalsOverview(),
+    getInvoicesOverview(),
+  ]);
+
+  return <div>{/* Use data */}</div>;
+}
+```
+
+### Sequential Data Fetching (when needed)
+
+```typescript
+import { getCustomer } from '@repo/auth/server/actions/get-customer';
+import { getRentalsOverview } from '@/src/app/(authenticated)/rentals/api';
+
+export default async function Page() {
+  const customer = await getCustomer();
+
+  // Wait for customer before fetching rentals
+  const { rentals } = await getRentalsOverview(customer.id);
+
+  return <div>{/* Use data */}</div>;
+}
+```
+
+## Revalidation
+
+### Time-based Revalidation
+
+```typescript
+// Revalidate every 60 seconds
+export const revalidate = 60;
+
+export default async function Page() {
+  const { data } = await fetch('https://api.example.com/data');
+  return <div>{data}</div>;
+}
+```
+
+### On-demand Revalidation
+
+```typescript
+// src/actions/invite-user.tsx
+'use server';
+
+import { revalidatePath } from 'next/cache';
+
+export async function inviteUser(formData: FormData) {
+  // Invite user...
+
+  // Revalidate the settings users page
+  revalidatePath('/settings/users');
+}
+```
+
+## Middleware
+
+```typescript
+// src/middleware.ts
+import { type NextRequest } from 'next/server';
+import { updateSession } from '@repo/auth/server/session';
+
+export async function middleware(request: NextRequest) {
+  return await updateSession(request);
+}
+
+export const config = {
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'
+  ]
+};
+```
+
+## Route Groups
+
+Use route groups `(groupName)` to organize routes without affecting URL structure.
+
+### Project Route Group Structure
+
+This project uses nested route groups to separate authenticated/unauthenticated routes and organize the dashboard with parallel routes:
+
+```
+src/app/
+  (unauthenticated)/
+    layout.tsx                    # Public layout
+    log-in/
+      [[...log-in]]/
+        page.tsx                  # /log-in
+    invite/
+      accept/
+        page.tsx                 # /invite/accept
+  (authenticated)/
+    layout.tsx                    # Auth check wrapper
+    (dashboard)/
+      layout.tsx                 # Dashboard layout with parallel routes
+      @rentals/
+        page.tsx                 # Rentals slot (parallel route)
+      @invoices/
+        page.tsx                 # Invoices slot (parallel route)
+      page.tsx                   # /dashboard (renders both slots)
+    rentals/
+      page.tsx                   # /rentals
+      actions/                   # Co-located server actions
+        request-pickup.tsx
+        request-service.tsx
+    invoices/
+      page.tsx                   # /invoices
+      [...invoiceDetail]/
+        page.tsx                 # /invoices/[...invoiceDetail]
+    settings/
+      layout.tsx                 # Settings layout
+      account/
+        page.tsx                 # /settings/account
+      billing/
+        page.tsx                 # /settings/billing
+      profile/
+        page.tsx                 # /settings/profile
+      users/
+        page.tsx                 # /settings/users
+    maintenance/
+      page.tsx                   # /maintenance
+  api/                           # API routes
+    auth/
+      login/
+        route.ts
+    payments/
+      start/
+        route.ts
+  actions/                       # Server Actions (not a route group)
+```
+
+**Key benefits:**
+
+- `(authenticated)` route group wraps all authenticated routes
+- `(dashboard)` route group uses parallel routes (`@rentals`, `@invoices`) for dashboard slots
+- Settings pages use a specialized settings layout
+- Route groups don't appear in the URL path
+
+## Parallel Routes
+
+This project uses parallel routes for the dashboard to show rentals and invoices side-by-side:
+
+```
+src/app/
+  (authenticated)/
+    (dashboard)/
+      @rentals/
+        page.tsx
+      @invoices/
+        page.tsx
+      layout.tsx
+      page.tsx
+```
+
+```typescript
+// src/app/(authenticated)/(dashboard)/layout.tsx
+export default function DashboardLayout({
+  children,
+  rentals,
+  invoices,
+}: {
+  children: React.ReactNode;
+  rentals: React.ReactNode;
+  invoices: React.ReactNode;
+}) {
+  return (
+    <div>
+      {children}
+      <div className="grid grid-cols-2">
+        {rentals}
+        {invoices}
+      </div>
+    </div>
+  );
+}
+```
+
+## Best Practices
+
+1. **Use Server Components by default** - only use Client Components when needed
+2. **Implement proper Suspense boundaries** for streaming SSR
+3. **Use Server Actions** for form handling and mutations
+4. **Implement proper loading and error states** (loading.tsx, error.tsx)
+5. **Use Metadata API** for SEO
+6. **Leverage Turbopack** for faster development builds (default in Next.js 15)
+7. **Use route groups** to organize related routes
+8. **Implement middleware** for authentication and redirects
+9. **Always prefer `Link` component over `router.push()` for navigation**
+
+- Use `Link` from `next/link` for all clickable navigation elements
+- Benefits: automatic prefetching, better accessibility, right-click support, SEO-friendly
+- Use `asChild` prop with Radix UI components (DropdownMenuItem, etc.) to render as `Link`
+- Only use `router.push()` for programmatic navigation that cannot be expressed as a link (e.g., after form submission, conditional redirects)

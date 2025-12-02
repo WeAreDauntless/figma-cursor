@@ -1,0 +1,671 @@
+---
+description: Code standards and conventions specific to the app
+globs:
+  - "src/**/*.ts"
+  - "src/**/*.tsx"
+alwaysApply: true
+---
+
+# App Code Standards
+
+For the following globs:
+
+- "src/\*_/_.ts"
+- "src/\*_/_.tsx"
+
+## Architecture Decision Guide
+
+Use this flowchart when adding new code:
+
+```
+Is it a third-party service integration?
+  YES → src/services/{service-name}-service.ts
+
+Is it a type used across multiple features?
+  YES → src/types/
+
+Is it a pure utility or cross-cutting concern?
+  YES → src/utils/ or src/lib/
+
+Is it business logic for a module (rentals, invoices, settings)?
+  YES → src/app/(authenticated)/{module}/
+
+Is it a server action?
+  YES → src/actions/ or co-located in module folder
+
+Is it a Zod schema?
+  YES → src/schemas/ or co-located in module folder
+
+Is it a UI component?
+  YES → src/components/
+
+Is it a custom React hook?
+  YES → src/hooks/
+
+Is it a Zustand store?
+  YES → src/stores/
+
+Is it a React provider?
+  YES → src/providers/
+
+Is it a Next.js page, layout, or route?
+  YES → src/app/
+```
+
+## Dependency Rules
+
+Follow these rules to maintain clean architecture:
+
+### 1. Module folders (rentals, invoices, settings) can import from:
+
+- ✅ `services/` (to access external services)
+- ✅ `types/` (for type definitions)
+- ✅ `utils/` or `lib/` (for utilities)
+- ✅ `components/` (for UI components)
+- ✅ `hooks/` (for custom hooks)
+- ✅ `actions/` (for server actions)
+- ✅ `schemas/` (for Zod schemas)
+- ✅ Workspace packages (`@repo/ui`, `@repo/auth`, `@repo/api`, etc.)
+- ❌ Other module folders (modules should be independent)
+
+```typescript
+// Good
+import { callEdgeFunction } from "@/src/services/supabase";
+import type { PaymentSession } from "@/src/types/payment-session";
+import { formatCurrency } from "@/src/utils/currency";
+import { Button } from "@@components/shadcn/button";
+import { getCustomer } from "@repo/auth/server/actions/get-customer";
+
+// Bad
+import { getRentals } from "@/src/app/(authenticated)/rentals/api";
+```
+
+### 2. Services can import from:
+
+- ✅ `types/` (for type definitions)
+- ✅ `utils/` or `lib/` (for utilities)
+- ✅ Workspace packages
+- ❌ Module folders (infrastructure shouldn't know about business logic)
+
+### 3. Utils/Lib can import from:
+
+- ✅ `types/` (for type definitions)
+- ✅ Workspace packages
+- ❌ Module folders or `services/` (utils should be pure/independent)
+
+### 4. App (routes, actions) can import from:
+
+- ✅ Module folders (to implement business logic)
+- ✅ `services/` (when needed directly)
+- ✅ `types/`, `utils/`, `lib/`, `components/`, `hooks/`, `actions/`, `schemas/`
+- ✅ Workspace packages
+
+## File Naming Conventions
+
+### Components
+
+- **kebab-case.tsx**: `user-card.tsx`, `data-table.tsx`, `payment-modal.tsx`
+- Component names (exports) use PascalCase: `UserCard`, `DataTable`, `PaymentModal`
+- File names use kebab-case matching the component name
+- One component per file (exceptions for small, tightly coupled components)
+- Component subdirectories: `components/data-table/` for related components
+
+### Hooks
+
+- **kebab-case.ts with use- prefix**: `use-payment-flow.ts`, `use-download-csv.ts`, `use-hot-key.ts`
+- Custom hooks always start with `use`
+- Hook names (exports) use camelCase: `usePaymentFlow`, `useDownloadCsv`, `useHotKey`
+
+### Services
+
+- **kebab-case.ts with -service suffix**: `authorize-net-service.ts`, `email-service.ts`, `pdf-service.ts`
+- Service names (exports) use PascalCase: `AuthorizeNetService`, `EmailService`, `PdfService`
+- One service per file
+
+### Module Folders (Rentals, Invoices, Settings)
+
+- **API files**: `api.ts` (server-side data fetching)
+- **Actions**: `actions.ts` or co-located action files like `request-service.tsx`
+- **Schemas**: `schema.ts` or `schemas.ts` (Zod schemas)
+- **Types**: `types.ts` (module-specific types)
+- **Utils**: `utils.ts` (module-specific utilities)
+- **Hooks**: `hooks.tsx` (module-specific hooks)
+- **Store**: `store.ts` (Zustand store if needed)
+- **Components**: kebab-case component files
+
+### Actions
+
+- **kebab-case.tsx**: `invite-user.tsx`, `send-payment-success-email.tsx`, `share-report.tsx`
+- Server actions use `'use server'` directive
+- Group related actions in one file or co-locate with module
+
+### Pages (Next.js)
+
+- **lowercase**: `page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`
+- **Dynamic routes**: `[id]/page.tsx`, `[...invoiceDetail]/page.tsx`
+- **Route groups**: `(authenticated)/layout.tsx`, `(unauthenticated)/layout.tsx`
+- **API routes**: `route.ts` in `app/api/` directories
+
+### Schemas
+
+- **kebab-case.ts**: `email.ts`, `phone-number.ts`, `forms.ts`
+- Co-locate module schemas in module folders: `rentals/schema.ts`
+
+### Utils
+
+- **kebab-case.ts**: `currency.ts`, `invoice.ts`, `split-comma.ts`
+- Pure utility functions, no side effects
+
+### Tests
+
+- **component-name.test.tsx**: Match the file being tested (kebab-case)
+- \***\*tests**/\*\* directory for multiple test files
+- Co-locate test files: `split-comma.test.ts` next to `split-comma.ts`
+
+## Variable Naming
+
+```typescript
+// Good examples
+const userEmail = "user@example.com";
+const isLoading = false;
+const hasPermission = true;
+const canEdit = false;
+const workspaces = [
+  /* array */
+];
+const MAX_FILE_SIZE = 1024 * 1024 * 5;
+
+// Bad examples
+const email = "user@example.com"; // Too vague
+const loading = false; // Missing 'is' prefix
+const permission = true; // Missing 'has' prefix
+const workspace = [
+  /* array */
+]; // Should be plural
+const maxFileSize = 1024 * 1024 * 5; // Should be UPPER_SNAKE_CASE
+```
+
+### Rules:
+
+- **Booleans**: Start with `is`, `has`, `can`, `should`
+- **Collections**: Use plural nouns
+- **Constants**: UPPER_SNAKE_CASE
+- **Variables/Functions**: camelCase
+- Be descriptive, not verbose
+
+### Examples for Skyworks project:
+
+```typescript
+// Good examples
+const isInvoicePaid = false;
+const hasActiveRentals = true;
+const canManageUsers = false;
+const rentals = [
+  /* array */
+];
+const invoices = [
+  /* array */
+];
+const MAX_FILE_SIZE = 1024 * 1024 * 5;
+const rentalStatus = "active";
+const invoiceAmount = 1250.0;
+
+// Bad examples
+const paid = false; // Too vague
+const rental = [
+  /* array */
+]; // Should be plural
+const maxFileSize = 1024 * 1024 * 5; // Should be UPPER_SNAKE_CASE
+```
+
+## Function Naming
+
+```typescript
+// Good
+async function fetchRentalsWithAuth(customerId: string) {}
+async function createPaymentSession(invoiceIds: string[]) {}
+function getInvoiceStatus(invoiceId: string) {}
+function handleSubmit(e: FormEvent) {}
+async function requestPickup(data: PickupRequestData) {}
+async function requestService(data: ServiceRequestData) {}
+
+// Bad
+async function rentals(customerId: string) {} // Missing verb
+async function create(data: PaymentData) {} // Too vague
+function status(invoiceId: string) {} // Missing verb
+function onSubmit(e: FormEvent) {} // Use 'handle' prefix
+```
+
+### Rules:
+
+- **Verb + noun** structure: `getCustomer`, `createPaymentSession`, `updateInvoice`
+- **Async functions**: Clear action verbs like `fetch`, `create`, `update`, `delete`, `request`
+- **Event handlers**: `handle` prefix: `handleClick`, `handleSubmit`, `handlePayment`
+- **Server actions**: Use descriptive names: `requestPickup`, `requestService`, `inviteUser`
+- Be specific about what the function does
+
+## Import Organization
+
+Organize imports in this order:
+
+```typescript
+// 1. External packages (React, Next.js, etc.)
+import { useState } from "react";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+
+// 2. Workspace packages (@repo/*)
+import { Button } from "@@components/shadcn/button";
+import { cn } from "@utils/cn";
+import { getCustomer } from "@repo/auth/server/actions/get-customer";
+import { render, sendMail } from "@repo/email";
+import { getCompany } from "@repo/api/admin/get-company";
+
+// 3. Absolute imports (app code - @/src/*)
+import { callEdgeFunction } from "@/src/services/supabase";
+import { formatCurrency } from "@/src/utils/currency";
+import type { PaymentSession } from "@/src/types/payment-session";
+import { PaymentModal } from "@/src/components/payment-modal";
+
+// 4. Relative imports
+import { RentalCard } from "./rental-card";
+import type { Props } from "./types";
+```
+
+## UI Components and shadcn/ui
+
+### Adding shadcn/ui Components
+
+**Before adding**: Check if the component already exists in `packages/ui/src/components/shadcn/`
+
+To add new shadcn/ui components, run the command from the UI package directory:
+
+```bash
+cd packages/ui
+pnpm dlx shadcn@latest add button
+```
+
+This installs components directly into `packages/ui/src/components/shadcn/` and makes them available across the monorepo via `@repo/ui`.
+
+**Important**: Always run the shadcn CLI from the `packages/ui` directory. The `components.json` configuration file is located there, which ensures components are added to the correct location.
+
+### Using Shared UI Components
+
+Import shared components, hooks, and utilities from the `@repo/ui` package:
+
+```typescript
+// shadcn/ui Components
+import { Button } from "@@components/shadcn/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+} from "@@components/shadcn/dialog";
+import { Input } from "@@components/shadcn/input";
+
+// Custom Components
+import { CustomHeader } from "@@components/custom-header";
+
+// Hooks
+import { useLocalStorage } from "@hooks/use-local-storage";
+
+// Utilities
+import { cn } from "@utils/cn";
+import { formatDate } from "@lib/utils";
+```
+
+### Component Usage Pattern
+
+```typescript
+"use client";
+
+import { Button } from "@@components/shadcn/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@@components/shadcn/dialog";
+import { cn } from "@utils/cn";
+
+export function PaymentModal() {
+  return (
+    <Dialog>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Payment</DialogTitle>
+        </DialogHeader>
+        <Button className={cn("w-full")}>Pay Now</Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+### When to Use shadcn/ui vs Custom Components
+
+- ✅ **Use shadcn/ui** for standard UI elements (buttons, dialogs, inputs, etc.)
+- ✅ **Use custom components** (`@@components/custom-*`) for reusable components across all applications
+- ✅ **Create app-specific components** (`src/components/`) for components only used in this app
+
+## TypeScript Standards
+
+### Use Strict Mode
+
+All packages use TypeScript strict mode.
+
+### Avoid `any`
+
+```typescript
+// Bad
+function parseData(json: string): any {
+  return JSON.parse(json);
+}
+
+// Good
+function parseData<T>(json: string): T | null {
+  try {
+    const result: unknown = JSON.parse(json);
+    // Add type guard or validation here
+    return result as T;
+  } catch {
+    return null;
+  }
+}
+```
+
+### Type Imports
+
+Use `type` keyword for type-only imports:
+
+```typescript
+// Good
+import type { PaymentSession } from "@/src/types/payment-session";
+import type { FC, ReactNode } from "react";
+
+// Also good for named types with values
+import {
+  callEdgeFunction,
+  type PaymentInvoiceItem,
+} from "@/src/services/supabase";
+```
+
+### Proper Typing
+
+```typescript
+// Good - Explicit return types for public functions
+export async function fetchRentals(customerId: string): Promise<{
+  rentals: Rental[] | null;
+  error: string | null;
+}> {
+  // ...
+}
+
+// Good - Infer types from Zod schemas
+const requestPickupSchema = z.object({
+  rentalId: z.string(),
+  pickupDate: z.date(),
+  notes: z.string().optional(),
+});
+
+type RequestPickupData = z.infer<typeof requestPickupSchema>;
+
+// Good - Server action return types
+export async function requestPickup(
+  data: RequestPickupData
+): Promise<{ error: string | null }> {
+  // ...
+}
+
+// Bad - Missing return type
+export async function fetchRentals(customerId: string) {
+  // ...
+}
+```
+
+## React Import Standards
+
+**Use named imports instead of `import * as React`** - this is the modern standard with React 19+ and Next.js 15+:
+
+```typescript
+// ✅ GOOD: Named imports
+import { useMemo, useState, useEffect } from "react";
+import type { ComponentProps, ReactNode } from "react";
+
+// ❌ BAD: Namespace import
+import * as React from "react";
+```
+
+**Examples:**
+
+```typescript
+// For hooks
+import { useMemo, useCallback, useState } from "react";
+
+// For TypeScript types
+import type { ComponentProps, ReactNode, FC, PropsWithChildren } from "react";
+
+// For specific functionality
+import { useMemo } from "react";
+import type { ComponentProps } from "react";
+```
+
+## React Standards
+
+### Functional Components Only
+
+```typescript
+// Good
+export function RentalCard({ rental }: Props) {
+  return <div>{rental.equipmentNumber}</div>;
+}
+
+// Also acceptable
+export const RentalCard: FC<Props> = ({ rental }) => {
+  return <div>{rental.equipmentNumber}</div>;
+};
+
+// Bad - No class components
+export class RentalCard extends Component<Props> {
+  render() {
+    return <div>{this.props.rental.equipmentNumber}</div>;
+  }
+}
+```
+
+### Props Interface
+
+```typescript
+// Good - Descriptive interface name
+interface RentalCardProps {
+  rental: Rental;
+  onSelect?: (id: string) => void;
+  className?: string;
+}
+
+export function RentalCard({ rental, onSelect, className }: RentalCardProps) {
+  // ...
+}
+
+// Good - Using readonly for props
+interface PaymentModalProps {
+  readonly invoiceIds: string[];
+  readonly onSuccess?: () => void;
+  readonly onClose: () => void;
+}
+```
+
+### Component Size
+
+- Keep components under 200 lines
+- Extract smaller components if larger
+- Use custom hooks for complex state logic
+
+## Error Handling
+
+### Structured Errors
+
+```typescript
+// Good - Structured error responses
+export async function createPaymentSession(invoiceIds: string[]) {
+  try {
+    const result = await callEdgeFunction<PaymentSession>(
+      "create_payment_session",
+      {
+        invoiceIds,
+      }
+    );
+
+    if (result.error) {
+      return { session: null, error: result.error };
+    }
+
+    return { session: result.data, error: null };
+  } catch (error) {
+    console.error("Failed to create payment session:", error);
+    return { session: null, error: "An unexpected error occurred" };
+  }
+}
+
+// Good - Server action error handling
+export async function requestPickup(data: RequestPickupData): Promise<{
+  error: string | null;
+}> {
+  try {
+    // ... implementation
+    return { error: null };
+  } catch (error) {
+    console.error("Failed to request pickup:", error);
+    return { error: "Failed to submit pickup request" };
+  }
+}
+```
+
+### Error Handling in Services
+
+```typescript
+// Good - Service error handling
+export class PdfService {
+  async generatePdf(
+    contractId: string
+  ): Promise<{ pdf: string | null; error: string | null }> {
+    try {
+      // ... implementation
+      return { pdf: base64Pdf, error: null };
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+      return { pdf: null, error: "Failed to generate PDF" };
+    }
+  }
+}
+```
+
+## JSDoc Comments
+
+Add JSDoc comments for public functions:
+
+```typescript
+/**
+ * Fetch rentals for a customer with authentication checks
+ *
+ * @param customerId - The Shopify customer ID
+ * @returns Array of rentals or error
+ *
+ * @example
+ * const { rentals, error } = await fetchRentalsWithAuth('customer-123');
+ * if (error) {
+ *   console.error(error);
+ * } else {
+ *   console.log(rentals.length);
+ * }
+ */
+export async function fetchRentalsWithAuth(customerId: string) {
+  // ...
+}
+
+/**
+ * Create a payment session for one or more invoices
+ *
+ * @param invoiceIds - Array of invoice IDs to include in payment session
+ * @returns Payment session data or error
+ */
+export async function createPaymentSession(invoiceIds: string[]) {
+  // ...
+}
+```
+
+## Security
+
+- ✅ Validate all user inputs (use Zod schemas)
+- ✅ Use Supabase RPC functions for database access (parameterized by default)
+- ✅ Check authentication in server-side code (use `@repo/auth/server`)
+- ✅ Never log sensitive information (passwords, tokens, payment data, etc.)
+- ✅ Use environment variables for secrets (via `@/env`)
+- ✅ Use `'use server'` directive for server actions
+- ✅ Validate customer access to resources (rentals, invoices) server-side
+- ❌ Never expose API keys in client code
+- ❌ Never expose Shopify Admin API tokens in client code
+- ❌ Never expose Authorize.net credentials in client code
+
+## Performance
+
+- Use React Server Components by default (better performance)
+- Implement proper loading states (`loading.tsx` files)
+- Use Suspense for streaming
+- Optimize images with next/image
+- Use React.memo sparingly (only for expensive components)
+- Use TanStack React Query for client-side data fetching and caching
+- Use virtual scrolling for large data tables (`@tanstack/react-virtual`)
+- Use Zustand for client-side state management (lightweight)
+
+```typescript
+// Only use memo for expensive components
+import { memo } from "react";
+
+export const ExpensiveRentalList = memo(function ExpensiveRentalList({
+  rentals,
+}: Props) {
+  // Complex rendering logic
+  return <div>{/* ... */}</div>;
+});
+
+// Good - Use React Query for data fetching
+import { useQuery } from "@tanstack/react-query";
+
+export function useRentals(customerId: string) {
+  return useQuery({
+    queryKey: ["rentals", customerId],
+    queryFn: () => fetchRentals(customerId),
+  });
+}
+```
+
+## Accessibility
+
+- Follow WCAG 2.2 guidelines
+- Use semantic HTML elements
+- Add proper ARIA labels
+
+```typescript
+// Good
+<button onClick={handleClick} aria-label="Close payment modal">
+  <XIcon />
+</button>
+
+<nav aria-label="Main navigation">
+  <ul>...</ul>
+</nav>
+
+<button onClick={handleRequestPickup} aria-label="Request equipment pickup">
+  Request Pickup
+</button>
+
+// Bad
+<div onClick={handleClick}>
+  <XIcon />
+</div>
+
+<div onClick={handleRequestPickup}>
+  Request Pickup
+</div>
+```
