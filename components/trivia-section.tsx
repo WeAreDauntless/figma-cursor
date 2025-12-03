@@ -26,31 +26,64 @@ export function TriviaSection({ facts }: TriviaSectionProps) {
   };
 
   return (
-    <div className="border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden">
+    <div
+      className="overflow-hidden rounded-lg border"
+      style={{
+        backgroundColor: "var(--theme-card-bg)",
+        borderColor: "var(--theme-card-border)",
+      }}
+    >
       {/* Header */}
-      <div className="px-4 py-4 border-b border-gray-700 flex items-center gap-3">
-        <Lightbulb className="w-5 h-5 text-red-500" />
-        <h3 className="text-white text-lg font-semibold">Fun Facts & Trivia</h3>
+      <div
+        className="flex items-center gap-3 border-b px-4 py-4"
+        style={{ borderColor: "var(--theme-card-border)" }}
+      >
+        <Lightbulb className="h-5 w-5 text-[var(--theme-accent)]" />
+        <h3 className="text-lg font-semibold text-[var(--theme-text-primary)]">
+          Fun Facts &amp; Trivia
+        </h3>
       </div>
 
       {/* Fact Content */}
       <div className="p-4">
         {/* Fact Card */}
-        <div className="relative rounded-lg overflow-hidden bg-gray-900/50 border border-gray-700 mb-4">
+        <div
+          className="relative mb-4 overflow-hidden rounded-lg border"
+          style={{
+            backgroundColor: "var(--theme-hero-overlay)",
+            borderColor: "var(--theme-card-border)",
+          }}
+        >
           {/* Image Placeholder */}
-          <div className="w-full h-[180px] bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-            <div className="text-white/20 text-sm">Image Placeholder</div>
+          <div
+            className="flex h-[180px] w-full items-center justify-center"
+            style={{
+              background: `linear-gradient(135deg, var(--theme-hero-from), var(--theme-hero-to))`,
+            }}
+          >
+            <div
+              className="text-sm"
+              style={{ color: "var(--theme-text-muted)", opacity: 0.7 }}
+            >
+              Image Placeholder
+            </div>
           </div>
 
           {/* Fact Content Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/80 to-transparent p-6 flex flex-col justify-end">
-            <div className="text-white/60 text-xs mb-2">
+          <div
+            className="absolute inset-0 flex flex-col justify-end p-6"
+            style={{
+              background:
+                "linear-gradient(180deg, transparent 0%, var(--theme-hero-overlay-soft) 45%, var(--theme-hero-overlay) 100%)",
+            }}
+          >
+            <div className="mb-2 text-xs text-[var(--theme-text-secondary)]">
               Fact {currentIndex + 1} of {facts.length}
             </div>
-            <h4 className="text-white text-lg font-semibold mb-2">
+            <h4 className="mb-2 text-lg font-semibold text-[var(--theme-text-primary)]">
               {currentFact.title}
             </h4>
-            <p className="text-white/80 text-sm leading-relaxed line-clamp-3">
+            <p className="line-clamp-3 text-sm leading-relaxed text-[var(--theme-text-secondary)]">
               {currentFact.description}
             </p>
           </div>
@@ -62,9 +95,9 @@ export function TriviaSection({ facts }: TriviaSectionProps) {
             variant="ghost"
             size="sm"
             onClick={goToPrevious}
-            className="text-white/70 hover:text-white hover:bg-white/10"
+            className="text-[var(--theme-text-secondary)] hover:bg-[var(--theme-card-hover)] hover:text-[var(--theme-text-primary)]"
           >
-            <ChevronLeft className="w-4 h-4 mr-1" />
+            <ChevronLeft className="mr-1 h-4 w-4" />
             Previous
           </Button>
 
@@ -75,11 +108,13 @@ export function TriviaSection({ facts }: TriviaSectionProps) {
                 key={index}
                 type="button"
                 onClick={() => goToFact(index)}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  index === currentIndex
-                    ? "bg-red-500"
-                    : "bg-gray-600 hover:bg-gray-500"
-                }`}
+                className="h-2 w-2 rounded-full transition-colors"
+                style={{
+                  backgroundColor:
+                    index === currentIndex
+                      ? "var(--theme-accent)"
+                      : "var(--theme-card-border)",
+                }}
                 aria-label={`Go to fact ${index + 1}`}
               />
             ))}
@@ -89,10 +124,10 @@ export function TriviaSection({ facts }: TriviaSectionProps) {
             variant="ghost"
             size="sm"
             onClick={goToNext}
-            className="text-white/70 hover:text-white hover:bg-white/10"
+            className="text-[var(--theme-text-secondary)] hover:bg-[var(--theme-card-hover)] hover:text-[var(--theme-text-primary)]"
           >
             Next
-            <ChevronRight className="w-4 h-4 ml-1" />
+            <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         </div>
       </div>

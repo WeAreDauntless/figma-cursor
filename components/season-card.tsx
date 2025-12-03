@@ -36,38 +36,45 @@ export function SeasonCard({
   }, [episodes]);
 
   return (
-    <div className="border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden">
+    <div
+      className="overflow-hidden rounded-lg border"
+      style={{
+        backgroundColor: "var(--theme-card-bg)",
+        borderColor: "var(--theme-card-border)",
+      }}
+    >
       {/* Header */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-4 py-4 flex items-center justify-between hover:bg-white/5 transition-colors border-b border-gray-700"
+        className="flex w-full items-center justify-between px-4 py-4 transition-colors hover:bg-[var(--theme-card-hover)] border-b"
+        style={{ borderColor: "var(--theme-card-border)" }}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 text-left">
           <div className="flex items-center gap-3">
-            <span className="text-red-500 text-lg font-semibold">
+            <span className="text-lg font-semibold text-[var(--theme-accent)]">
               Season {seasonNumber}
             </span>
-            <span className="text-white/70 text-sm">
+            <span className="text-sm text-[var(--theme-text-secondary)]">
               {watchedCount} / {episodes.length} watched
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-white/70 text-sm">
+          <div className="flex items-center gap-2 text-sm text-[var(--theme-text-secondary)]">
             <span>Avg Rating:</span>
-            <span className="font-medium">
+            <span className="font-medium text-[var(--theme-text-primary)]">
               {averageRating !== null ? averageRating.toFixed(1) : "N/A"}
             </span>
             {averageRating !== null && (
-              <TrendingUp className="w-5 h-5 text-red-500" />
+              <TrendingUp className="h-5 w-5 text-[var(--theme-accent)]" />
             )}
           </div>
           {isExpanded ? (
-            <ChevronUp className="w-5 h-5 text-white/70" />
+            <ChevronUp className="h-5 w-5 text-[var(--theme-text-secondary)]" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-white/70" />
+            <ChevronDown className="h-5 w-5 text-[var(--theme-text-secondary)]" />
           )}
         </div>
       </button>

@@ -19,12 +19,23 @@ export function TopRatedEpisodes({ episodes }: TopRatedEpisodesProps) {
 
   if (topEpisodes.length === 0) {
     return (
-      <div className="border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden">
-        <div className="px-4 py-4 border-b border-gray-700 flex items-center gap-3">
-          <Trophy className="w-5 h-5 text-yellow-500" />
-          <h3 className="text-white text-lg font-semibold">Top Rated Episodes</h3>
+      <div
+        className="overflow-hidden rounded-lg border"
+        style={{
+          backgroundColor: "var(--theme-card-bg)",
+          borderColor: "var(--theme-card-border)",
+        }}
+      >
+        <div
+          className="flex items-center gap-3 border-b px-4 py-4"
+          style={{ borderColor: "var(--theme-card-border)" }}
+        >
+          <Trophy className="h-5 w-5 text-[var(--theme-highlight)]" />
+          <h3 className="text-lg font-semibold text-[var(--theme-text-primary)]">
+            Top Rated Episodes
+          </h3>
         </div>
-        <div className="px-4 py-8 text-center text-white/50 text-sm">
+        <div className="px-4 py-8 text-center text-sm text-[var(--theme-text-muted)]">
           No rated episodes yet
         </div>
       </div>
@@ -32,33 +43,50 @@ export function TopRatedEpisodes({ episodes }: TopRatedEpisodesProps) {
   }
 
   return (
-    <div className="border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden">
+    <div
+      className="overflow-hidden rounded-lg border"
+      style={{
+        backgroundColor: "var(--theme-card-bg)",
+        borderColor: "var(--theme-card-border)",
+      }}
+    >
       {/* Header */}
-      <div className="px-4 py-4 border-b border-gray-700 flex items-center gap-3">
-        <Trophy className="w-5 h-5 text-yellow-500" />
-        <h3 className="text-white text-lg font-semibold">Top Rated Episodes</h3>
+      <div
+        className="flex items-center gap-3 border-b px-4 py-4"
+        style={{ borderColor: "var(--theme-card-border)" }}
+      >
+        <Trophy className="h-5 w-5 text-[var(--theme-highlight)]" />
+        <h3 className="text-lg font-semibold text-[var(--theme-text-primary)]">
+          Top Rated Episodes
+        </h3>
       </div>
 
       {/* Episode List */}
-      <div className="p-4 space-y-4">
+      <div className="space-y-4 p-4">
         {topEpisodes.map((episode, index) => (
           <div
             key={episode.id}
-            className="flex items-start gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors"
+            className="flex items-start gap-3 rounded-lg p-3 transition-colors hover:bg-[var(--theme-card-hover)]"
           >
             {/* Rank Number */}
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-yellow-500/20 border border-yellow-500/50 flex-shrink-0">
-              <span className="text-yellow-500 font-semibold text-sm">
+            <div
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border"
+              style={{
+                backgroundColor: "var(--theme-highlight-muted)",
+                borderColor: "var(--theme-highlight)",
+              }}
+            >
+              <span className="text-sm font-semibold text-[var(--theme-highlight)]">
                 {index + 1}
               </span>
             </div>
 
             {/* Episode Info */}
             <div className="flex-1 min-w-0">
-              <div className="text-white/70 text-sm mb-1">
+              <div className="mb-1 text-sm text-[var(--theme-text-secondary)]">
                 S{episode.season}E{episode.number}
               </div>
-              <div className="text-white text-sm font-medium mb-2 line-clamp-1">
+              <div className="mb-2 line-clamp-1 text-sm font-medium text-[var(--theme-text-primary)]">
                 {episode.title}
               </div>
               <StarRating rating={episode.rating} size="sm" readonly />
