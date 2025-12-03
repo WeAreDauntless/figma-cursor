@@ -25,15 +25,15 @@ export function EpisodeItem({
   };
 
   return (
-    <div className="flex items-center py-4 px-4 rounded-lg hover:bg-white/5 transition-colors">
+    <div className="flex items-center py-4 px-4 rounded-xl hover:bg-rose-50 transition-colors">
       <button
         type="button"
         onClick={handleCheckboxChange}
         className={cn(
           "flex items-center justify-center w-6 h-6 rounded border-2 transition-colors flex-shrink-0",
           episode.watched
-            ? "bg-red-500 border-red-500"
-            : "border-gray-400 bg-transparent hover:border-gray-300"
+            ? "bg-rose-500 border-rose-500 shadow-sm"
+            : "border-gray-300 bg-white hover:border-gray-400"
         )}
         aria-label={`Mark episode ${episode.number} as ${episode.watched ? "unwatched" : "watched"}`}
       >
@@ -43,7 +43,7 @@ export function EpisodeItem({
       </button>
 
       <div className="flex-1 flex items-center justify-between gap-4 ml-3">
-        <span className="text-white text-base flex-1">
+        <span className="text-gray-900 text-base flex-1">
           Episode {episode.number}: {episode.title}
         </span>
 
