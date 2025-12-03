@@ -55,7 +55,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* Header */}
       <Header stats={stats} />
 
@@ -64,7 +64,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_394px] gap-8">
           {/* Left Column - Seasons */}
           <div>
-            <h2 className="text-white text-xl font-semibold mb-6">Seasons</h2>
+            <h2 className="text-gray-900 text-xl font-semibold mb-6">Seasons</h2>
             <div className="space-y-6">
               {seasons.map(({ seasonNumber, episodes: seasonEpisodes }) => (
                 <SeasonCard
@@ -81,7 +81,7 @@ export default function Dashboard() {
           {/* Right Column - Sidebar */}
           <div className="space-y-6">
             <div
-              className="hidden lg:block text-white text-xl font-semibold mb-6 invisible"
+              className="hidden lg:block text-gray-900 text-xl font-semibold mb-6 invisible"
               aria-hidden="true"
             >
               Seasons
