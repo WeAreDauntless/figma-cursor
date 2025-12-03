@@ -80,6 +80,12 @@ export default function Dashboard() {
 
           {/* Right Column - Sidebar */}
           <div className="space-y-6">
+            <div
+              className="hidden lg:block text-white text-xl font-semibold mb-6 invisible"
+              aria-hidden="true"
+            >
+              Seasons
+            </div>
             <TopRatedEpisodes episodes={episodesState} />
             <TriviaSection facts={triviaFacts} />
           </div>
