@@ -36,38 +36,38 @@ export function SeasonCard({
   }, [episodes]);
 
   return (
-    <div className="border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden">
+    <div className="border border-rose-100 rounded-2xl bg-white shadow-sm overflow-hidden">
       {/* Header */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-4 py-4 flex items-center justify-between hover:bg-white/5 transition-colors border-b border-gray-700"
+        className="w-full px-4 py-4 flex items-center justify-between hover:bg-rose-50 transition-colors border-b border-rose-50"
       >
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
-            <span className="text-red-500 text-lg font-semibold">
+            <span className="text-rose-600 text-lg font-semibold">
               Season {seasonNumber}
             </span>
-            <span className="text-white/70 text-sm">
+            <span className="text-slate-500 text-sm">
               {watchedCount} / {episodes.length} watched
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-white/70 text-sm">
+          <div className="flex items-center gap-2 text-slate-500 text-sm">
             <span>Avg Rating:</span>
             <span className="font-medium">
               {averageRating !== null ? averageRating.toFixed(1) : "N/A"}
             </span>
             {averageRating !== null && (
-              <TrendingUp className="w-5 h-5 text-red-500" />
+              <TrendingUp className="w-5 h-5 text-rose-500" />
             )}
           </div>
           {isExpanded ? (
-            <ChevronUp className="w-5 h-5 text-white/70" />
+            <ChevronUp className="w-5 h-5 text-slate-500" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-white/70" />
+            <ChevronDown className="w-5 h-5 text-slate-500" />
           )}
         </div>
       </button>
