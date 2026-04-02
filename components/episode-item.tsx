@@ -25,25 +25,28 @@ export function EpisodeItem({
   };
 
   return (
-    <div className="flex items-center py-4 px-4 rounded-lg hover:bg-white/5 transition-colors">
+    <div className="flex items-center rounded-lg px-4 py-4 transition-colors hover:bg-[var(--theme-card-hover)]">
       <button
         type="button"
         onClick={handleCheckboxChange}
         className={cn(
-          "flex items-center justify-center w-6 h-6 rounded border-2 transition-colors flex-shrink-0",
+          "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded border-2 transition-colors",
           episode.watched
-            ? "bg-red-500 border-red-500"
-            : "border-gray-400 bg-transparent hover:border-gray-300"
+            ? "bg-[var(--theme-accent)] border-[var(--theme-accent)]"
+            : "border-[var(--theme-text-muted)] bg-transparent hover:border-[var(--theme-text-secondary)]"
         )}
         aria-label={`Mark episode ${episode.number} as ${episode.watched ? "unwatched" : "watched"}`}
       >
         {episode.watched && (
-          <Check className="w-4 h-4 text-white" strokeWidth={3} />
+          <Check
+            className="h-4 w-4 text-[var(--theme-accent-contrast)]"
+            strokeWidth={3}
+          />
         )}
       </button>
 
-      <div className="flex-1 flex items-center justify-between gap-4 ml-3">
-        <span className="text-white text-base flex-1">
+      <div className="ml-3 flex flex-1 items-center justify-between gap-4">
+        <span className="flex-1 text-base text-[var(--theme-text-primary)]">
           Episode {episode.number}: {episode.title}
         </span>
 
